@@ -4,19 +4,17 @@ services:
   # Tailscale service to connect to your Tailscale network
   tailscale:
     image: ghcr.io/tailscale/tailscale:latest # Official Tailscale image
-    container_name: tailscale_daemon
-    hostname: command-pidog # Sets the container's hostname
+    container_name: ts-command-pidog
+    hostname: command-pidog # Sets the container's hostname and advertised hostname on Tailscale
     environment:
-      # Your Tailscale authentication key.
+      # Tailscale authentication key
       # REQUIRED: Set this in a .env file or directly in your environment.
-      # Example: TS_AUTHKEY=tskey-auth-yourkeyhere...
       - TS_AUTHKEY=${TS_AUTHKEY:-}
-      # Sets the advertised hostname on your Tailscale network.
-      # Defaults to 'bun-static-server' if TS_HOSTNAME is not set in your environment.
-      - TS_HOSTNAME=${TS_HOSTNAME:-bun-static-server}
       # Tells Tailscale where to store its state data within the container.
       - TS_STATE_DIR=/var/lib/tailscale
+      # HTTPS configuration for Tailscale
       - TS_SERVE_CONFIG=/config/https.json
+      - TS_USERSPACE=false # Use the Tailscale userspace networking stack (default is true)
       # Optional: Add tags for Tailscale ACLs or auto-approval.
       # Example: --advertise-tags=tag:docker-server,tag:web
       # - TS_EXTRA_ARGS=--advertise-tags=tag:my-app
