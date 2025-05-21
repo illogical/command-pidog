@@ -19,6 +19,8 @@ services:
       # Example: --advertise-tags=tag:docker-server,tag:web
       # - TS_EXTRA_ARGS=--advertise-tags=tag:my-app
     volumes:
+      # Mounts a local directory for Tailscale configuration files
+      - ${PWD}/config:/config
       # Mounts a named Docker volume to persist Tailscale state across container restarts.
       - tailscale_state:/var/lib/tailscale
       # Required for Tailscale to create the tunnel interface.
@@ -47,7 +49,7 @@ services:
     # Command to start Bun's built-in static file server.
     # It serves files from '/app/html' on port 80 (internal to the container's network).
     # This port 80 will be accessible via the Tailscale IP.
-    command: ["bunx", "serve", "/app/www", "--port", "80"]
+    command: ["bunx", "serve", "/app/www", "--listen", "80"]
     restart: unless-stopped
     # working_dir: /app # Optional: set working directory if needed by your Bun setup
 
