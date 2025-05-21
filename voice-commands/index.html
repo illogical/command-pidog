@@ -1,0 +1,256 @@
+<!-- Voice Recorder using a local Whisper server. -->
+<!-- Records until 2 seconds of silence is detected. -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Command Pidog</title>
+
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Icons (for microphone / loader) -->
+    <script src="https://unpkg.com/feather-icons"></script>
+</head>
+
+<body class="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 text-gray-100">
+    <div class="w-full max-w-xl">
+        <!-- Textbox -->
+        <textarea id="transcript" rows="6" placeholder="Your transcription will appear here…"
+            class="w-full resize-none rounded-2xl p-4 text-base bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"></textarea>
+
+        <!-- Mic / Loader button -->
+        <div class="flex justify-center mt-6">
+            <button id="recordBtn"
+                class="relative flex items-center justify-center w-24 h-24 rounded-full bg-blue-600 shadow-lg transition-all duration-200 ease-in-out focus:outline-none"
+                title="Click to record">
+                <i data-feather="mic" class="w-10 h-10 stroke-[3]" id="micIcon"></i>
+            </button>
+        </div>
+
+        <!-- Hidden audio element for debug / playback (optional) -->
+        <audio id="audioPlayback" class="hidden"></audio>
+    </div>
+
+    <script>
+        feather.replace();
+
+        /*=============== CONFIG ===============*/
+        const TRANSCRIBE_ENDPOINT = "http://beast2024:5000/transcribe"; // ↳ adjust for your whisper server
+        const SILENCE_SEC = 2; // stop after 2 s of silence
+        const MAX_SEC = 60; // overall timeout fallback
+        const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
+
+        /*=============== STATE ===============*/
+        let mediaRecorder,
+            audioChunks = [],
+            analyser,
+            dataArray,
+            silenceStart,
+            recordingTimer;
+
+        /*=============== ELEMENTS ===============*/
+        const recordBtn = document.getElementById("recordBtn");
+        const micIcon = document.getElementById("micIcon");
+        const transcriptBox = document.getElementById("transcript");
+        const audioPlayback = document.getElementById("audioPlayback");
+
+        /*=============== HELPERS ===============*/
+        function toWavBlob(buffers, sampleRate) {
+            /* Minimal WAV encoder ‑ stereo/mono 16‑bit */
+            const interleaved = flattenArray(buffers);
+            const dataview = new DataView(new ArrayBuffer(44 + interleaved.length * 2));
+
+            // RIFF identifier & file length
+            writeString(dataview, 0, "RIFF");
+            dataview.setUint32(4, 36 + interleaved.length * 2, true);
+            writeString(dataview, 8, "WAVE");
+
+            // fmt chunk
+            writeString(dataview, 12, "fmt ");
+            dataview.setUint32(16, 16, true); // chunk size
+            dataview.setUint16(20, 1, true); // PCM
+            dataview.setUint16(22, 1, true); // channels
+            dataview.setUint32(24, sampleRate, true);
+            dataview.setUint32(28, sampleRate * 2, true); // byte rate
+            dataview.setUint16(32, 2, true); // block align
+            dataview.setUint16(34, 16, true); // bits per sample
+
+            // data chunk
+            writeString(dataview, 36, "data");
+            dataview.setUint32(40, interleaved.length * 2, true);
+
+            // PCM samples
+            let offset = 44;
+            for (let i = 0; i < interleaved.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, interleaved[i]));
+                dataview.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+            }
+            return new Blob([dataview], { type: "audio/wav" });
+        }
+
+        function writeString(view, offset, str) {
+            for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        }
+
+        function flattenArray(channelBuffers) {
+            const length = channelBuffers.reduce((sum, b) => sum + b.length, 0);
+            const result = new Float32Array(length);
+            let offset = 0;
+            channelBuffers.forEach((buffer) => {
+                result.set(buffer, offset);
+                offset += buffer.length;
+            });
+            return result;
+        }
+
+        /*=============== UI STATE ===============*/
+        function setLoading(isLoading) {
+            if (isLoading) {
+                micIcon.dataset.feather = "loader";
+                micIcon.classList.add("animate-spin");
+                recordBtn.classList.add("pointer-events-none");
+            } else {
+                micIcon.dataset.feather = "mic";
+                micIcon.classList.remove("animate-spin");
+                recordBtn.classList.remove("pointer-events-none");
+            }
+            feather.replace();
+        }
+
+        function setRecording(isRecording) {
+            if (isRecording) {
+                recordBtn.classList.remove("bg-blue-600");
+                recordBtn.classList.add("bg-red-600", "animate-pulse");
+            } else {
+                recordBtn.classList.remove("bg-red-600", "animate-pulse");
+                recordBtn.classList.add("bg-blue-600");
+            }
+        }
+
+        /*=============== RECORDING ===============*/
+        recordBtn.addEventListener("click", async () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("Your browser does not support audio recording.");
+                return;
+            }
+
+            // prevent double‑clicks
+            recordBtn.classList.add("pointer-events-none");
+            micIcon.style.opacity = 0.5;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                const bufferLength = analyser.fftSize;
+                dataArray = new Uint8Array(bufferLength);
+                source.connect(analyser);
+
+                // MediaRecorder (Safari < 14 lacks support)
+                const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+                    ? "audio/webm"
+                    : MediaRecorder.isTypeSupported("audio/mp4")
+                        ? "audio/mp4"
+                        : "";
+                mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+
+                audioChunks = [];
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    clearTimeout(recordingTimer);
+                    setRecording(false);
+                    setLoading(true);
+                    stream.getTracks().forEach((t) => t.stop());
+
+                    // Merge chunks into single Blob; convert to WAV if needed
+                    const combinedBlob = new Blob(audioChunks);
+
+                    // Convert WebM/MP4 to raw PCM and then WAV using OfflineAudioContext (cross‑browser); fallback to send blob directly.
+                    let wavBlob;
+                    try {
+                        const arrayBuffer = await combinedBlob.arrayBuffer();
+                        const decodedBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                        const channelData = [];
+                        for (let i = 0; i < decodedBuffer.numberOfChannels; i++) {
+                            channelData.push(decodedBuffer.getChannelData(i));
+                        }
+                        wavBlob = toWavBlob(channelData, decodedBuffer.sampleRate);
+                    } catch (err) {
+                        console.warn("WAV conversion failed; sending original blob", err);
+                        wavBlob = combinedBlob;
+                    }
+
+                    // Optional playback for debugging
+                    audioPlayback.src = URL.createObjectURL(wavBlob);
+
+                    // Send to Whisper API
+                    const formData = new FormData();
+                    formData.append("audio", wavBlob, "speech.wav");
+                    try {
+                        const res = await fetch(TRANSCRIBE_ENDPOINT, {
+                            method: "POST",
+                            body: formData,
+                            mode: "cors"
+                        });
+                        const json = await res.json();
+                        transcriptBox.value = json.text || json.transcription || "(No text returned)";
+                    } catch (err) {
+                        console.error(err);
+                        alert("Transcription failed.");
+                    }
+                    setLoading(false);
+                    recordBtn.classList.remove("pointer-events-none");
+                    micIcon.style.opacity = 1;
+                };
+
+                mediaRecorder.start();
+                setRecording(true);
+                detectSilence();
+
+                // Fallback timeout
+                recordingTimer = setTimeout(() => {
+                    mediaRecorder.stop();
+                }, MAX_SEC * 1000);
+            } catch (err) {
+                console.error(err);
+                recordBtn.classList.remove("pointer-events-none");
+            }
+        });
+
+        function detectSilence() {
+            silenceStart = performance.now();
+            const check = () => {
+                analyser.getByteTimeDomainData(dataArray);
+                let sum = 0;
+                for (const v of dataArray) {
+                    const normalized = v / 128 - 1; // -1..1
+                    sum += normalized * normalized;
+                }
+                const rms = Math.sqrt(sum / dataArray.length);
+
+                if (rms < SILENCE_THRESHOLD) {
+                    if (performance.now() - silenceStart > SILENCE_SEC * 1000) {
+                        mediaRecorder.stop();
+                        return; // stop polling
+                    }
+                } else {
+                    silenceStart = performance.now(); // reset timer on speech
+                }
+                requestAnimationFrame(check);
+            };
+            check();
+        }
+    </script>
+</body>
+
+</html>
