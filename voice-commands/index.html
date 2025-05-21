@@ -38,10 +38,22 @@
         feather.replace();
 
         /*=============== CONFIG ===============*/
-        const TRANSCRIBE_ENDPOINT = "http://beast2024:5000/transcribe"; // ↳ adjust for your whisper server
+        let TRANSCRIBE_ENDPOINT = "http://beast2024:5000/transcribe";
         const SILENCE_SEC = 2; // stop after 2 s of silence
-        const MAX_SEC = 60; // overall timeout fallback
+        const MAX_SEC = 12; // overall timeout fallback
         const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
+
+        /*=============== LOAD FROM CONFIG ===============*/
+        fetch("command-pidog.json")
+            .then(res => res.json())
+            .then(cfg => {
+            if (cfg.TRANSCRIBE_ENDPOINT) {
+                TRANSCRIBE_ENDPOINT = cfg.transcribe_endpoint;
+            }
+            })
+            .catch(err => {
+            console.warn("Could not load command-pidog.json:", err);
+            });
 
         /*=============== STATE ===============*/
         let mediaRecorder,
