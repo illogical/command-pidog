@@ -48,16 +48,7 @@
         const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
 
          /*=============== LOAD FROM CONFIG ===============*/
-         fetch("config.json")
-            .then(res => res.json())
-            .then(cfg => {
-            if (cfg.TRANSCRIBE_ENDPOINT) {
-                TRANSCRIBE_ENDPOINT = cfg.TRANSCRIBE_ENDPOINT;
-            }
-            })
-            .catch(err => {
-                console.warn("Could not load config.json. Using default "+ TRANSCRIBE_ENDPOINT, err);
-            });
+        loadConfig("config.json");
 
         /*=============== STATE ===============*/
         let mediaRecorder,
@@ -174,10 +165,7 @@
                 micIcon.style.opacity = 1;
                 
                 // Reset pulse animations
-                pulseRing1.classList.remove("opacity-30", "scale-125");
-                pulseRing1.classList.add("opacity-0", "scale-100");
-                pulseRing2.classList.remove("opacity-30", "scale-150");
-                pulseRing2.classList.add("opacity-0", "scale-100");
+                resetPulseAnimations();
             }
         }
 
@@ -216,6 +204,7 @@
             isRecordingByButton = true;
             
             // Set visual feedback immediately
+            highlightTranscriptBoxLoading();
             recordBtn.classList.add("pointer-events-none");
             micIcon.style.opacity = 0.5;
             setRecording(true);
@@ -273,6 +262,8 @@
                     // Send to Whisper API
                     const formData = new FormData();
                     formData.append("audio", wavBlob, "speech.wav");
+                    let transcriptionError = false;
+
                     try {
                         const res = await fetch(TRANSCRIBE_ENDPOINT, {
                             method: "POST",
@@ -280,17 +271,18 @@
                         });
                         const json = await res.json();
                         transcriptBox.value = json.text || json.transcription || "(No text returned)";
+
                     } catch (err) {
                         console.error(err);
+                        highlightTranscriptBoxError();
                         alert("Transcription failed.");
+                        transcriptionError = true;
                     } finally {
                         setLoading(false);
-                        recordBtn.classList.remove("pointer-events-none");
-                        recordBtn.style.transition = 'all 0.3s ease-in-out';
-                        recordBtn.style.backgroundColor = '#2563eb'; // Reset to original blue-600
-                        recordBtn.style.transform = 'scale(1)';
-                        micIcon.style.opacity = 1;
-                        micIcon.style.transition = 'opacity 0.3s ease-in-out';
+                        recordButtonReset();
+                        if (!transcriptionError) {
+                            highlightTranscriptBoxSuccess();
+                        }
                     }
                 };
 
@@ -382,18 +374,71 @@
             recordBtn.classList.remove("pointer-events-none");
             isRecordingByButton = false;
             
-            // Reset button styles
-            recordBtn.style.transition = 'all 0.3s ease-in-out';
-            recordBtn.style.backgroundColor = '#2563eb';
+            recordButtonReset();
+        }
+
+        function loadConfig(filename) {
+            return fetch(filename)
+                .then(res => res.json())
+                .then(cfg => {
+                    if (cfg.TRANSCRIBE_ENDPOINT) {
+                        TRANSCRIBE_ENDPOINT = cfg.TRANSCRIBE_ENDPOINT;
+                    }
+                })
+                .catch(err => {
+                    console.warn("Could not load config.json. Using default " + TRANSCRIBE_ENDPOINT, err);
+                });
+        }
+
+        function recordButtonReset() {
+            recordBtn.classList.remove("pointer-events-none");
+            recordBtn.style.transition = 'all 0.4s ease-in-out';
+            recordBtn.style.backgroundColor = '#2563eb'; // Reset to original blue-600
             recordBtn.style.transform = 'scale(1)';
-            micIcon.style.opacity = 1;
-            micIcon.style.transition = 'opacity 0.3s ease-in-out';
-            
+
             // Ensure mic icon is reset
+            micIcon.style.opacity = 1;
+            micIcon.style.transition = 'opacity 0.4s ease-in-out';
             micIcon.dataset.feather = 'mic';
             micIcon.classList.remove('animate-spin');
             feather.replace();
         }
+
+        function resetPulseAnimations() {
+            const pulseRing1 = document.getElementById('pulseRing1');
+            const pulseRing2 = document.getElementById('pulseRing2');
+            
+            pulseRing1.classList.remove("opacity-30", "scale-125");
+            pulseRing1.classList.add("opacity-0", "scale-100");
+            
+            pulseRing2.classList.remove("opacity-30", "scale-150");
+            pulseRing2.classList.add("opacity-0", "scale-100");
+        }
+
+        function highlightTranscriptBoxSuccess() {
+            transcriptBox.style.transition = 'box-shadow 0.2s ease-in-out';
+            transcriptBox.style.boxShadow = '0 0 0 2px rgba(52, 199, 89, 0.5)';
+            setTimeout(() => {
+                transcriptBox.style.transition = 'box-shadow 1s ease-in-out';
+                transcriptBox.style.boxShadow = '';
+            }, 1000);
+        }
+
+        function highlightTranscriptBoxLoading() {
+            transcriptBox.style.transition = 'box-shadow 0.3s ease-in-out';
+            transcriptBox.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.5)';
+        }
+
+        function highlightTranscriptBoxError() {
+            transcriptBox.style.transition = 'box-shadow 0.3s ease-in-out';
+            transcriptBox.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 1)';
+
+            setTimeout(() => {
+                transcriptBox.style.transition = 'box-shadow 1s ease-in-out';
+                transcriptBox.style.boxShadow = '';
+            }, 2000);
+        }
+
     </script>
 </body>
 
