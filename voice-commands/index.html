@@ -44,7 +44,7 @@
         const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
 
          /*=============== LOAD FROM CONFIG ===============*/
-         fetch("/config/command-pidog.json")
+         fetch("config.json")
             .then(res => res.json())
             .then(cfg => {
             if (cfg.TRANSCRIBE_ENDPOINT) {
@@ -52,7 +52,7 @@
             }
             })
             .catch(err => {
-            console.warn("Could not load /config/command-pidog.json. Using default "+TRANSCRIBE_ENDPOINT, err);
+                console.warn("Could not load config.json. Using default "+ TRANSCRIBE_ENDPOINT, err);
             });
 
         /*=============== STATE ===============*/
@@ -141,11 +141,18 @@
             } else {
                 recordBtn.classList.remove("bg-red-600", "animate-pulse");
                 recordBtn.classList.add("bg-blue-600");
+                isRecordingByButton = false;
             }
         }
 
         /*=============== RECORDING ===============*/
-        recordBtn.addEventListener("click", async () => {
+        let isTouchDevice = false;
+        let isRecordingByButton = false;
+
+        // Common function to start recording
+        async function startRecording() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') return;
+            
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 alert("Your browser does not support audio recording.");
                 return;
@@ -154,6 +161,7 @@
             // prevent double‑clicks
             recordBtn.classList.add("pointer-events-none");
             micIcon.style.opacity = 0.5;
+            isRecordingByButton = true;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -231,17 +239,60 @@
 
                 mediaRecorder.start();
                 setRecording(true);
-                detectSilence();
-
-                // Fallback timeout
-                recordingTimer = setTimeout(() => {
-                    mediaRecorder.stop();
-                }, MAX_SEC * 1000);
+                
+                // Only use silence detection if not using press-and-hold
+                if (!isTouchDevice) {
+                    detectSilence();
+                    // Fallback timeout only for silence detection mode
+                    recordingTimer = setTimeout(() => {
+                        if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                        }
+                    }, MAX_SEC * 1000);
+                }
             } catch (err) {
                 console.error(err);
-                recordBtn.classList.remove("pointer-events-none");
+                stopRecordingUI();
+            }
+        }
+
+        // Common function to stop recording UI
+        function stopRecordingUI() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            clearTimeout(recordingTimer);
+            recordBtn.classList.remove("pointer-events-none");
+            isRecordingByButton = false;
+        }
+
+        // Mouse events
+        recordBtn.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            isTouchDevice = false;
+            startRecording();
+        });
+
+        // Touch events
+        recordBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isTouchDevice = true;
+            startRecording();
+        }, { passive: false });
+
+        // Stop recording on mouseup/touchend
+        document.addEventListener('mouseup', () => {
+            if (isRecordingByButton && !isTouchDevice) {
+                stopRecordingUI();
             }
         });
+
+        document.addEventListener('touchend', (e) => {
+            if (isRecordingByButton && isTouchDevice) {
+                e.preventDefault();
+                stopRecordingUI();
+            }
+        }, { passive: false });
 
         function detectSilence() {
             silenceStart = performance.now();
@@ -265,6 +316,32 @@
                 requestAnimationFrame(check);
             };
             check();
+        }
+
+        // Common function to stop recording UI
+        function stopRecordingUI() {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            } else {
+                // If not recording but UI needs reset (e.g., on error)
+                setLoading(false);
+                setRecording(false);
+            }
+            clearTimeout(recordingTimer);
+            recordBtn.classList.remove("pointer-events-none");
+            isRecordingByButton = false;
+            
+            // Reset button styles
+            recordBtn.style.transition = 'all 0.3s ease-in-out';
+            recordBtn.style.backgroundColor = '#2563eb';
+            recordBtn.style.transform = 'scale(1)';
+            micIcon.style.opacity = 1;
+            micIcon.style.transition = 'opacity 0.3s ease-in-out';
+            
+            // Ensure mic icon is reset
+            micIcon.dataset.feather = 'mic';
+            micIcon.classList.remove('animate-spin');
+            feather.replace();
         }
     </script>
 </body>
