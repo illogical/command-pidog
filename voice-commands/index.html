@@ -23,11 +23,15 @@
 
         <!-- Mic / Loader button -->
         <div class="flex justify-center mt-6">
-            <button id="recordBtn"
-                class="relative flex items-center justify-center w-24 h-24 rounded-full bg-blue-600 shadow-lg transition-all duration-200 ease-in-out focus:outline-none"
-                title="Click to record">
-                <i data-feather="mic" class="w-10 h-10 stroke-[3]" id="micIcon"></i>
-            </button>
+            <div class="relative">
+                <div id="pulseRing1" class="absolute inset-0 w-24 h-24 rounded-full bg-blue-400 opacity-0 scale-100 transition-all duration-300"></div>
+                <div id="pulseRing2" class="absolute inset-0 w-24 h-24 rounded-full bg-blue-400 opacity-0 scale-100 transition-all duration-300"></div>
+                <button id="recordBtn"
+                    class="relative flex items-center justify-center w-24 h-24 rounded-full bg-blue-600 shadow-lg transition-all duration-200 ease-in-out focus:outline-none"
+                    title="Click to record">
+                    <i data-feather="mic" class="w-10 h-10 stroke-[3]" id="micIcon"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Hidden audio element for debug / playback (optional) -->
@@ -135,13 +139,45 @@
         }
 
         function setRecording(isRecording) {
+            const pulseRing1 = document.getElementById('pulseRing1');
+            const pulseRing2 = document.getElementById('pulseRing2');
+            
             if (isRecording) {
-                recordBtn.classList.remove("bg-blue-600");
-                recordBtn.classList.add("bg-red-600", "animate-pulse");
+                console.log('Setting recording state: true');
+                
+                // Completely reset button styles
+                recordBtn.className = 'relative flex items-center justify-center w-24 h-24 rounded-full shadow-lg transition-all duration-200 ease-in-out focus:outline-none';
+                recordBtn.style.backgroundColor = '#ef4444'; // red-600
+                
+                // Start pulsing animation
+                pulseRing1.classList.remove("opacity-0", "scale-100");
+                void pulseRing1.offsetWidth; // Trigger reflow
+                pulseRing1.classList.add("opacity-30", "scale-125");
+                
+                // Second ring with delay
+                setTimeout(() => {
+                    pulseRing2.classList.remove("opacity-0", "scale-100");
+                    void pulseRing2.offsetWidth; // Trigger reflow
+                    pulseRing2.classList.add("opacity-30", "scale-150");
+                }, 300);
             } else {
-                recordBtn.classList.remove("bg-red-600", "animate-pulse");
-                recordBtn.classList.add("bg-blue-600");
+                console.log('Setting recording state: false');
+                
+                // Completely reset button styles
+                recordBtn.className = 'relative flex items-center justify-center w-24 h-24 rounded-full bg-blue-600 shadow-lg transition-all duration-200 ease-in-out focus:outline-none';
+                recordBtn.style.backgroundColor = ''; // Reset inline style
+                
                 isRecordingByButton = false;
+                
+                // Re-enable pointer events and reset opacity
+                recordBtn.classList.remove("pointer-events-none");
+                micIcon.style.opacity = 1;
+                
+                // Reset pulse animations
+                pulseRing1.classList.remove("opacity-30", "scale-125");
+                pulseRing1.classList.add("opacity-0", "scale-100");
+                pulseRing2.classList.remove("opacity-30", "scale-150");
+                pulseRing2.classList.add("opacity-0", "scale-100");
             }
         }
 
@@ -151,17 +187,38 @@
 
         // Common function to start recording
         async function startRecording() {
-            if (mediaRecorder && mediaRecorder.state === 'recording') return;
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                console.log('Already recording');
+                return;
+            }
             
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 alert("Your browser does not support audio recording.");
                 return;
             }
 
-            // prevent double‑clicks
+            console.log('Starting recording...');
+            // Reset any existing media recorder
+            if (mediaRecorder) {
+                try {
+                    if (mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                } catch (e) {
+                    console.error('Error cleaning up previous recording:', e);
+                }
+                mediaRecorder = null;
+            }
+
+            // Reset state
+            audioChunks = [];
+            isRecordingByButton = true;
+            
+            // Set visual feedback immediately
             recordBtn.classList.add("pointer-events-none");
             micIcon.style.opacity = 0.5;
-            isRecordingByButton = true;
+            setRecording(true);
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -238,7 +295,6 @@
                 };
 
                 mediaRecorder.start();
-                setRecording(true);
                 
                 // Only use silence detection if not using press-and-hold
                 if (!isTouchDevice) {
@@ -256,22 +312,12 @@
             }
         }
 
-        // Common function to stop recording UI
-        function stopRecordingUI() {
-            if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
-            }
-            clearTimeout(recordingTimer);
-            recordBtn.classList.remove("pointer-events-none");
-            isRecordingByButton = false;
-        }
-
         // Mouse events
         recordBtn.addEventListener('mousedown', (e) => {
             e.preventDefault();
             isTouchDevice = false;
             startRecording();
-        });
+        }, { passive: false });
 
         // Touch events
         recordBtn.addEventListener('touchstart', (e) => {
@@ -322,6 +368,11 @@
         function stopRecordingUI() {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
+                setRecording(false);
+                clearTimeout(recordingTimer);
+                recordBtn.classList.remove("pointer-events-none");
+                isRecordingByButton = false;
+                micIcon.style.opacity = 1;
             } else {
                 // If not recording but UI needs reset (e.g., on error)
                 setLoading(false);
