@@ -38,21 +38,21 @@
         feather.replace();
 
         /*=============== CONFIG ===============*/
-        let TRANSCRIBE_ENDPOINT = "http://beast2024:5000/transcribe";
+        let TRANSCRIBE_ENDPOINT = "https://localhost:5000/transcribe";
         const SILENCE_SEC = 2; // stop after 2 s of silence
         const MAX_SEC = 12; // overall timeout fallback
         const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
 
-        /*=============== LOAD FROM CONFIG ===============*/
-        fetch("command-pidog.json")
+         /*=============== LOAD FROM CONFIG ===============*/
+         fetch("/config/command-pidog.json")
             .then(res => res.json())
             .then(cfg => {
             if (cfg.TRANSCRIBE_ENDPOINT) {
-                TRANSCRIBE_ENDPOINT = cfg.transcribe_endpoint;
+                TRANSCRIBE_ENDPOINT = cfg.TRANSCRIBE_ENDPOINT;
             }
             })
             .catch(err => {
-            console.warn("Could not load command-pidog.json:", err);
+            console.warn("Could not load /config/command-pidog.json. Using default "+TRANSCRIBE_ENDPOINT, err);
             });
 
         /*=============== STATE ===============*/
@@ -211,18 +211,22 @@
                     try {
                         const res = await fetch(TRANSCRIBE_ENDPOINT, {
                             method: "POST",
-                            body: formData,
-                            mode: "cors"
+                            body: formData
                         });
                         const json = await res.json();
                         transcriptBox.value = json.text || json.transcription || "(No text returned)";
                     } catch (err) {
                         console.error(err);
                         alert("Transcription failed.");
+                    } finally {
+                        setLoading(false);
+                        recordBtn.classList.remove("pointer-events-none");
+                        recordBtn.style.transition = 'all 0.3s ease-in-out';
+                        recordBtn.style.backgroundColor = '#2563eb'; // Reset to original blue-600
+                        recordBtn.style.transform = 'scale(1)';
+                        micIcon.style.opacity = 1;
+                        micIcon.style.transition = 'opacity 0.3s ease-in-out';
                     }
-                    setLoading(false);
-                    recordBtn.classList.remove("pointer-events-none");
-                    micIcon.style.opacity = 1;
                 };
 
                 mediaRecorder.start();
