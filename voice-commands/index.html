@@ -13,6 +13,7 @@
 
     <!-- Icons (for microphone / loader) -->
     <script src="https://unpkg.com/feather-icons"></script>
+    <script src="prompt.js"></script>
 </head>
 
 <body class="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4 text-gray-100">
@@ -271,7 +272,13 @@
                             body: formData
                         });
                         const json = await res.json();
-                        transcriptBox.value = json.text || json.transcription || "(No text returned)";
+                        transcriptBox.value = json.text || json.transcription || "";
+
+                        if(transcriptBox.value.length > 0)
+                        {
+                            await submitPrompt(transcriptBox.value);
+                        }
+
 
                     } catch (err) {
                         console.error(err);
@@ -401,6 +408,16 @@
                 .catch(err => {
                     console.warn("Could not load config.json. Using default " + TRANSCRIBE_ENDPOINT, err);
                 });
+        }
+
+        async function submitPrompt(prompt) {
+            // update microphone button to show a loading animation
+            setLoading(true);
+            const response = await getPromptResponse(prompt);
+            console.log(response);
+            setLoading(false);
+
+            // TODO: send actions to Pidog using RabbitMQ
         }
 
         async function requestMicrophoneAccess() {
