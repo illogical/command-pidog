@@ -45,7 +45,7 @@ This project provides a secure, private web interface for voice commands using a
 
 - The web app files are in `voice-commands/`.
 - The Bun server serves static files from this directory.
-- The web app expects a Whisper server at the endpoint configured in `command-pidog.json` (default: `http://beast2024:5000/transcribe`).
+- The web app expects a Whisper server at the endpoint configured in `command-pidog.json` (default: `http://localhost:5000/transcribe`).
 
 ## Stopping
 

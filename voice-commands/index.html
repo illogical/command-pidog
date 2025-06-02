@@ -204,7 +204,7 @@
             isRecordingByButton = true;
             
             // Set visual feedback immediately
-            highlightTranscriptBoxLoading();
+            highlightTranscriptBoxRecording();
             recordBtn.classList.add("pointer-events-none");
             micIcon.style.opacity = 0.5;
             setRecording(true);
@@ -263,6 +263,7 @@
                     const formData = new FormData();
                     formData.append("audio", wavBlob, "speech.wav");
                     let transcriptionError = false;
+                    highlightTranscriptBoxLoading();
 
                     try {
                         const res = await fetch(TRANSCRIBE_ENDPOINT, {
@@ -305,17 +306,29 @@
         }
 
         // Mouse events
-        recordBtn.addEventListener('mousedown', (e) => {
+        recordBtn.addEventListener('mousedown', async (e) => {
             e.preventDefault();
-            isTouchDevice = false;
-            startRecording();
+            var micAccess = await requestMicrophoneAccess();
+
+            if(micAccess) {
+                isTouchDevice = false;
+                startRecording();
+            }
         }, { passive: false });
 
         // Touch events
-        recordBtn.addEventListener('touchstart', (e) => {
+        let hasRequestedMicAccess = false;
+        recordBtn.addEventListener('touchstart', async (e) => {
             e.preventDefault();
-            isTouchDevice = true;
-            startRecording();
+            
+            if (!hasRequestedMicAccess) {
+                hasRequestedMicAccess = true;
+                await requestMicrophoneAccess();
+                // Don't start recording on first touch
+            } else {
+                isTouchDevice = true;
+                startRecording();
+            }
         }, { passive: false });
 
         // Stop recording on mouseup/touchend
@@ -390,6 +403,18 @@
                 });
         }
 
+        async function requestMicrophoneAccess() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone access granted');
+                return true;
+                // You can now use the stream, e.g., for recording
+            } catch (err) {
+                console.error('Microphone access denied:', err);
+                return false;
+            }
+        }
+
         function recordButtonReset() {
             recordBtn.classList.remove("pointer-events-none");
             recordBtn.style.transition = 'all 0.4s ease-in-out';
@@ -424,9 +449,14 @@
             }, 1000);
         }
 
-        function highlightTranscriptBoxLoading() {
+        function highlightTranscriptBoxRecording() {
             transcriptBox.style.transition = 'box-shadow 0.3s ease-in-out';
             transcriptBox.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.5)';
+        }
+
+        function highlightTranscriptBoxLoading() {
+            transcriptBox.style.transition = 'box-shadow 0.2s ease-in-out';
+            transcriptBox.style.boxShadow = '0 0 0 2px rgba(239, 221, 68, 0.5)';
         }
 
         function highlightTranscriptBoxError() {
