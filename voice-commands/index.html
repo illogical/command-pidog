@@ -21,6 +21,8 @@
         <!-- Textbox -->
         <textarea id="transcript" rows="6" placeholder="Your transcription will appear here…"
             class="w-full resize-none rounded-2xl p-4 text-base bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"></textarea>
+        <textarea id="answer" rows="6" placeholder="Your prompt response will appear here…"
+            class="w-full resize-none rounded-2xl p-4 text-base bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"></textarea>
 
         <!-- Mic / Loader button -->
         <div class="flex justify-center mt-6">
@@ -63,6 +65,7 @@
         const recordBtn = document.getElementById("recordBtn");
         const micIcon = document.getElementById("micIcon");
         const transcriptBox = document.getElementById("transcript");
+        const answerBox = document.getElementById("answer");
         const audioPlayback = document.getElementById("audioPlayback");
 
         /*=============== HELPERS ===============*/
@@ -278,6 +281,12 @@
                         {
                             await submitPrompt(transcriptBox.value);
                         }
+                        else
+                        {
+                            highlightTranscriptBoxError();
+                            highlightAnswerBoxError();
+                            console.error("Transcription was empty.");
+                        }
 
 
                     } catch (err) {
@@ -413,9 +422,30 @@
         async function submitPrompt(prompt) {
             // update microphone button to show a loading animation
             setLoading(true);
-            const response = await getPromptResponse(prompt);
-            console.log(response);
-            setLoading(false);
+            highlightAnswerBoxLoading();
+            
+            try {   
+                const response = await getPromptResponse(prompt);
+                console.log(response);
+
+                if(!response.error)
+                {
+                    highlightAnswerBoxSuccess();
+                    answerBox.value = JSON.stringify(response, null, 2);
+                }
+                else
+                {
+                    highlightAnswerBoxError();
+                    answerBox.value = response.error;
+                }
+                setLoading(false);
+                
+            } catch (error) {
+                console.error('Error in submitPrompt:', error);
+                highlightAnswerBoxError();
+                setLoading(false);
+            }
+
 
             // TODO: send actions to Pidog using RabbitMQ
         }
@@ -466,6 +496,15 @@
             }, 1000);
         }
 
+        function highlightAnswerBoxSuccess() {
+            answerBox.style.transition = 'box-shadow 0.2s ease-in-out';
+            answerBox.style.boxShadow = '0 0 0 2px rgba(52, 199, 89, 0.5)';
+            setTimeout(() => {
+                answerBox.style.transition = 'box-shadow 1s ease-in-out';
+                answerBox.style.boxShadow = '';
+            }, 1000);
+        }
+
         function highlightTranscriptBoxRecording() {
             transcriptBox.style.transition = 'box-shadow 0.3s ease-in-out';
             transcriptBox.style.boxShadow = '0 0 0 2px rgba(239, 68, 68, 0.5)';
@@ -476,6 +515,11 @@
             transcriptBox.style.boxShadow = '0 0 0 2px rgba(239, 221, 68, 0.5)';
         }
 
+        function highlightAnswerBoxLoading() {
+            answerBox.style.transition = 'box-shadow 0.2s ease-in-out';
+            answerBox.style.boxShadow = '0 0 0 2px rgba(239, 221, 68, 0.5)';
+        }
+        
         function highlightTranscriptBoxError() {
             transcriptBox.style.transition = 'box-shadow 0.3s ease-in-out';
             transcriptBox.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 1)';
@@ -483,6 +527,16 @@
             setTimeout(() => {
                 transcriptBox.style.transition = 'box-shadow 1s ease-in-out';
                 transcriptBox.style.boxShadow = '';
+            }, 2000);
+        }
+
+        function highlightAnswerBoxError() {
+            answerBox.style.transition = 'box-shadow 0.3s ease-in-out';
+            answerBox.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 1)';
+
+            setTimeout(() => {
+                answerBox.style.transition = 'box-shadow 1s ease-in-out';
+                answerBox.style.boxShadow = '';
             }, 2000);
         }
 

@@ -3,7 +3,7 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 10000);
 
-        const response = await fetch('http://localhost:11434/api/chat', {
+        const response = await fetch('https://llmproxy.bangus-city.ts.net/ollama/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -30,7 +30,10 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         }
 
         const data = await response.json();
-        return data.message?.content || 'No response content';
+        const messageCount = data.messages.length;
+        const contentCount =  data.messages[messageCount - 1].contents.length;
+        console.log("Response body: ", data);
+        return data.messages[messageCount - 1].contents[contentCount - 1].text || 'No response content';
     } catch (error) {
         console.error('Error calling Ollama API:', error);
         throw error; // Re-throw to allow caller to handle the error
@@ -87,5 +90,3 @@ function loadConfig(filename) {
             return null;
         });
 }
-
-export { sendPrompt };
