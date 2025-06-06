@@ -3,7 +3,10 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 10000);
 
-        const response = await fetch('https://llmproxy.bangus-city.ts.net/ollama/chat', {
+        const config = await loadConfig("config.json");
+        const chatUrl = config.CHAT_URL;
+
+        const response = await fetch(chatUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -32,7 +35,7 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         const data = await response.json();
         const messageCount = data.messages.length;
         const contentCount =  data.messages[messageCount - 1].contents.length;
-        console.log("Response body: ", data);
+
         return data.messages[messageCount - 1].contents[contentCount - 1].text || 'No response content';
     } catch (error) {
         console.error('Error calling Ollama API:', error);
@@ -77,16 +80,4 @@ async function getPromptResponse(prompt) {
         console.error('Error in getPromptResponse:', error);
         return { error: 'Failed to get response', details: error.message };
     }
-}
-
-function loadConfig(filename) {
-    return fetch(filename)
-        .then(res => res.json())
-        .then(cfg => {
-            return cfg;
-        })
-        .catch(err => {
-            console.warn("Could not load config.json.", err);
-            return null;
-        });
 }
