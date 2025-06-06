@@ -323,7 +323,7 @@
                         // Optional playback for debugging
                         audioPlayback.src = URL.createObjectURL(wavBlob);
 
-                        // Send to Whisper API
+                        // Send recording to Whisper API for voice-to-text
                         const formData = new FormData();
                         formData.append("audio", wavBlob, "speech.wav");
                         let transcriptionError = false;
@@ -337,26 +337,40 @@
                             const json = await res.json();
                             transcriptBox.value = json.text || json.transcription || "";
 
-                            if (transcriptBox.value.length > 0) {
-                                await submitPrompt(transcriptBox.value);
-                            }
-                            else {
-                                highlightTranscriptBoxError();
-                                highlightAnswerBoxError();
-                                console.error("Transcription was empty.");
-                            }
-
-
                         } catch (err) {
                             console.error(err);
                             highlightTranscriptBoxError();
                             alert("Transcription failed.");
                             transcriptionError = true;
                         } finally {
-                            setLoading(false);
-                            recordButtonReset();
                             if (!transcriptionError) {
                                 highlightTranscriptBoxSuccess();
+                            }
+                        }
+
+
+                        let promptError = false;
+                        // send prompt to Ollama API with a system prompt to get Pidog actions and answer
+                        try {
+                            if (transcriptBox.value.length > 0) {
+                                let promptResponse = await submitPrompt(transcriptBox.value);
+                                // TODO: send actions to Pidog using RabbitMQ
+                                // await addToQueue("pidog-actions", promptResponse);
+                            }
+                            else {
+                                highlightAnswerBoxError();
+                                console.error("Transcription was empty.");
+                            }
+                        } catch (error) {
+                            console.error(error);
+                            highlightAnswerBoxError();
+                            alert("Prompt failed.");
+                            promptError = true;
+                        } finally {
+                            setLoading(false);
+                            recordButtonReset();
+                            if (!promptError) {
+                                highlightAnswerBoxSuccess();
                             }
                         }
                     };
@@ -425,46 +439,33 @@
                 recordButtonReset();
             }
 
-            // function loadConfig(filename) {
-            //     return fetch(filename)
-            //         .then(res => res.json())
-            //         .then(cfg => {
-            //             if (cfg.TRANSCRIBE_ENDPOINT) {
-            //                 TRANSCRIBE_ENDPOINT = cfg.TRANSCRIBE_ENDPOINT;
-            //             }
-            //         })
-            //         .catch(err => {
-            //             console.warn("Could not load config.json. Using default " + TRANSCRIBE_ENDPOINT, err);
-            //         });
-            // }
-
             async function submitPrompt(prompt) {
                 // update microphone button to show a loading animation
                 setLoading(true);
                 highlightAnswerBoxLoading();
 
                 try {
-                    const response = await getPromptResponse(prompt);
-                    console.log(response);
+                    const promptResponse = await getPromptResponse(prompt);
+                    console.log(promptResponse);
 
-                    if (!response.error) {
+                    if (!promptResponse.error) {
                         highlightAnswerBoxSuccess();
-                        answerBox.value = JSON.stringify(response, null, 2);
+                        answerBox.value = JSON.stringify(promptResponse, null, 2);
                     }
                     else {
                         highlightAnswerBoxError();
-                        answerBox.value = response.error;
+                        answerBox.value = promptResponse.error;
                     }
                     setLoading(false);
+
+                    return promptResponse;
 
                 } catch (error) {
                     console.error('Error in submitPrompt:', error);
                     highlightAnswerBoxError();
                     setLoading(false);
+                    return "";
                 }
-
-
-                // TODO: send actions to Pidog using RabbitMQ
             }
 
             async function requestMicrophoneAccess() {

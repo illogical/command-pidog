@@ -30,7 +30,7 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error calling Ollama API. Status: ${response.status}`);
         }
 
         const data = await response.json();
