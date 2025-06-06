@@ -8,6 +8,7 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
 
         const response = await fetch(chatUrl, {
             method: 'POST',
+            mode: 'cors',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -35,6 +36,8 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
         const data = await response.json();
         const messageCount = data.messages.length;
         const contentCount =  data.messages[messageCount - 1].contents.length;
+
+        console.log("Prompt response: ", data);
 
         return data.messages[messageCount - 1].contents[contentCount - 1].text || 'No response content';
     } catch (error) {
