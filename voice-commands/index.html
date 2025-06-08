@@ -349,13 +349,12 @@
                         }
 
 
+                        let promptResponse = "";
                         let promptError = false;
                         // send prompt to Ollama API with a system prompt to get Pidog actions and answer
                         try {
                             if (transcriptBox.value.length > 0) {
-                                let promptResponse = await submitPrompt(transcriptBox.value);
-                                // TODO: send actions to Pidog using RabbitMQ
-                                // await addToQueue("pidog-actions", promptResponse);
+                                promptResponse = await submitPrompt(transcriptBox.value);
                             }
                             else {
                                 highlightAnswerBoxError();
@@ -364,15 +363,31 @@
                         } catch (error) {
                             console.error(error);
                             highlightAnswerBoxError();
-                            alert("Prompt failed.");
                             promptError = true;
                         } finally {
-                            setLoading(false);
-                            recordButtonReset();
                             if (!promptError) {
                                 highlightAnswerBoxSuccess();
                             }
                         }
+
+
+                        console.log("Prompt response: ", promptResponse);
+                        if(!promptError && promptResponse.length == null) {
+                            // send actions to Pidog using RabbitMQ
+                            await addToQueue("pidog-actions", promptResponse.actions);
+                            console.log("Actions sent to Pidog");
+                            // Show success animation
+                            await showSuccessAnimation();
+                        }
+                        else {
+                            console.error("Unable to add a message to the queue. Prompt was empty or failed.");
+                            // reset the button state
+                            setLoading(false);
+                            recordButtonReset();  
+                            alert("Prompt failed.");
+                        }
+
+                                                      
                     };
 
                     mediaRecorder.start();
@@ -445,7 +460,7 @@
                 highlightAnswerBoxLoading();
 
                 try {
-                    const promptResponse = await getPromptResponse(prompt);
+                    let promptResponse = await getPromptResponse(prompt);
                     console.log(promptResponse);
 
                     if (!promptResponse.error) {
@@ -556,6 +571,19 @@
                     answerBox.style.transition = 'box-shadow 1s ease-in-out';
                     answerBox.style.boxShadow = '';
                 }, 2000);
+            }
+
+            async function showSuccessAnimation() {
+                // Show thumbs up icon
+                micIcon.dataset.feather = "thumbs-up";
+                micIcon.classList.remove("animate-spin");
+                micIcon.classList.add("text-green-500", "animate-bounce");
+                feather.replace();
+                
+                // Wait for 2 seconds
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                recordButtonReset();  
             }
         })();
 

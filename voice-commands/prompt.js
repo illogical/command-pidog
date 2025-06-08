@@ -29,17 +29,9 @@ async function sendPrompt(userPrompt, systemPrompt = 'You are a helpful assistan
             signal: controller.signal
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error calling Ollama API. Status: ${response.status}`);
-        }
-
         const data = await response.json();
-        const messageCount = data.messages.length;
-        const contentCount =  data.messages[messageCount - 1].contents.length;
 
-        console.log("Prompt response: ", data);
-
-        return data.messages[messageCount - 1].contents[contentCount - 1].text || 'No response content';
+        return parsePromptResponse(data) || 'No response content';
     } catch (error) {
         console.error('Error calling Ollama API:', error);
         throw error; // Re-throw to allow caller to handle the error
@@ -82,5 +74,25 @@ async function getPromptResponse(prompt) {
     } catch (error) {
         console.error('Error in getPromptResponse:', error);
         return { error: 'Failed to get response', details: error.message };
+    }
+}
+
+function parsePromptResponse(response) {
+    try {
+        const messageCount = response.messages.length;
+        const contentCount =  response.messages[messageCount - 1].contents.length;
+
+        if (!response || !response.messages || response.messages.length === 0) {
+            throw new Error('Invalid response format from Ollama API');
+        }
+
+        if (!response.messages[messageCount - 1].contents || response.messages[messageCount - 1].contents.length === 0) {
+            throw new Error('Invalid response format from Ollama API');
+        }
+
+        return response.messages[messageCount - 1].contents[contentCount - 1].text;
+    } catch (error) {
+        console.error('Error parsing prompt response:', error);
+        return null;
     }
 }
