@@ -374,7 +374,7 @@
                         console.log("Prompt response: ", promptResponse);
                         if(!promptError && promptResponse.length == null) {
                             // send actions to Pidog using RabbitMQ
-                            await addToQueue("pidog-actions", promptResponse.actions);
+                            await addToQueue("pidog-actions", promptResponse);
                             console.log("Actions sent to Pidog");
                             // Show success animation
                             await showSuccessAnimation();
