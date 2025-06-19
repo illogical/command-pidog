@@ -18,53 +18,20 @@
     <script src="helpers.js"></script>
 </head>
 
-<body class="min-h-screen bg-gray-900 text-gray-100 flex">
-    <!-- Sidebar -->
-    <div class="w-64 bg-gray-800 p-6 overflow-y-auto fixed left-0 top-0 bottom-0">
-        <h2 class="text-xl font-semibold mb-4 text-blue-400">Available Actions</h2>
-        <div class="space-y-4">
-            <ul class="list-disc pl-5 space-y-1">
-                <li>forward</li>
-                <li>backward</li>
-                <li>lie</li>
-                <li>stand</li>
-                <li>sit</li>
-                <li>bark</li>
-                <li>bark harder</li>
-                <li>pant</li>
-                <li>howling</li>
-                <li>wag tail</li>
-                <li>stretch</li>
-                <li>push up</li>
-                <li>scratch</li>
-                <li>handshake</li>
-                <li>high five</li>
-                <li>lick hand</li>
-                <li>shake head</li>
-                <li>relax neck</li>
-                <li>nod</li>
-                <li>think</li>
-                <li>recall</li>
-                <li>head down</li>
-                <li>fluster</li>
-                <li>surprise</li>
-            </ul>
-        </div>
-    </div>
-
+<body class="min-h-screen bg-gray-900 text-gray-100 flex flex-col items-center justify-center p-4">
     <!-- Main Content -->
-    <div class="flex-1 ml-64 p-8 flex flex-col items-center">
+    <div class="w-full max-w-4xl p-6">
         <div class="max-w-2xl w-full">
             <!-- Instructions -->
-            <div class="mb-6 p-4 bg-blue-900/20 rounded-xl border border-blue-800/50">
-                <h3 class="text-lg font-medium text-blue-300 mb-2">Command Pidog</h3>
-                <p class="text-blue-100">Hold down the <span class="font-semibold">microphone button</span> and speak your commands then release the button when done, and Pidog will take action.</p>
+            <div class="mb-4 p-3 bg-blue-900/20 rounded-lg border border-blue-800/50 text-sm">
+                <h3 class="text-base font-medium text-blue-300 mb-1">Command Pidog</h3>
+                <p class="text-blue-100 text-sm">Hold down the <span class="font-semibold">microphone button</span> to begin recording.</p>
             </div>
 
             <!-- Textbox -->
-            <textarea id="transcript" rows="6" placeholder="Your transcription will appear here…"
+            <textarea id="transcript" rows="2" placeholder="Your transcription will appear here…"
                 class="w-full resize-none rounded-2xl p-4 text-base bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"></textarea>
-            <textarea id="answer" rows="6" placeholder="Your prompt response will appear here…"
+            <textarea id="answer" rows="8" placeholder="Your prompt response will appear here…"
                 class="w-full resize-none rounded-2xl p-4 text-base bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 mt-4"></textarea>
 
             <!-- Mic / Loader button -->
@@ -84,6 +51,42 @@
                 </div>
             </div>
 
+            <!-- Available Actions Section -->
+            <div class="mt-8 w-full max-w-md mx-auto">
+                <button id="toggleActions" class="flex items-center justify-center w-full py-2 px-4 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-sm font-medium transition-colors">
+                    <span>Show Available Commands</span>
+                    <i data-feather="chevron-down" class="ml-2 w-4 h-4 transition-transform duration-200" id="toggleIcon"></i>
+                </button>
+                <div id="actionsList" class="mt-2 bg-gray-800/50 rounded-lg p-4 hidden overflow-hidden transition-all duration-200 max-h-0">
+                    <ul class="grid grid-cols-2 gap-2 text-sm">
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">forward</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">backward</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">lie</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">stand</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">sit</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">bark</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">bark harder</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">pant</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">howling</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">wag tail</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">stretch</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">push up</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">scratch</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">handshake</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">high five</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">lick hand</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">shake head</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">relax neck</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">nod</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">think</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">recall</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">head down</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">fluster</li>
+                        <li class="px-3 py-1.5 bg-gray-700/50 rounded hover:bg-gray-600/50 transition-colors">surprise</li>
+                    </ul>
+                </div>
+            </div>
+
             <!-- Hidden audio element for debug / playback (optional) -->
             <audio id="audioPlayback" class="hidden"></audio>
         </div>
@@ -97,6 +100,7 @@
             /*=============== CONFIG ===============*/
             const CONFIG = await loadConfig("config.json");
             let TRANSCRIBE_ENDPOINT = CONFIG.TRANSCRIBE_ENDPOINT;
+
             const SILENCE_SEC = 2; // stop after 2 s of silence
             const MAX_SEC = 12; // overall timeout fallback
             const SILENCE_THRESHOLD = 0.02; // rms volume threshold (0–1)
@@ -374,7 +378,8 @@
                         try {
                             const res = await fetch(TRANSCRIBE_ENDPOINT, {
                                 method: "POST",
-                                body: formData
+                                body: formData,
+                                mode: 'cors'
                             });
                             const json = await res.json();
                             transcriptBox.value = json.text || json.transcription || "";
@@ -628,6 +633,31 @@
                 recordButtonReset();  
             }
         })();
+
+        // Toggle available commands
+        document.getElementById('toggleActions').addEventListener('click', function() {
+        const actionsList = document.getElementById('actionsList');
+        const toggleIcon = document.getElementById('toggleIcon');
+        const isExpanded = actionsList.classList.toggle('hidden');
+
+        if (isExpanded) {
+            actionsList.style.maxHeight = '0';
+            toggleIcon.style.transform = 'rotate(0deg)';
+            this.querySelector('span').textContent = 'Show Available Commands';
+        } else {
+            // First remove max-height to get the full scrollHeight
+            actionsList.style.maxHeight = 'none';
+            const height = actionsList.scrollHeight + 'px';
+            // Then set the max-height for the animation
+            actionsList.style.maxHeight = '0';
+            // Force reflow
+            void actionsList.offsetHeight;
+            // Set to full height with animation
+            actionsList.style.maxHeight = height;
+            toggleIcon.style.transform = 'rotate(180deg)';
+            this.querySelector('span').textContent = 'Hide Available Commands';
+        }
+    });
 
     </script>
 </body>
