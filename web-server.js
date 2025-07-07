@@ -1,5 +1,5 @@
 let port = 5301;
-let filename = "voice-recorder.html";
+let filename = "index.html";
 
 Bun.serve({
   port: port,
@@ -31,4 +31,4 @@ Bun.serve({
   }
 });
 
-console.log("Listening on http://localhost:" + port);
+console.log("Listening on port " + port);

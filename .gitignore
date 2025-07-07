@@ -136,3 +136,4 @@ dist
 .pnp.*
 config/command-pidog.json
 voice-commands/config.json
+config/config.json
