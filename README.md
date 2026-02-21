@@ -34,7 +34,7 @@ command-pidog/
 │   ├── app/
 │   │   ├── main.py         # App entry point, WebSocket endpoint
 │   │   ├── config.py       # Environment-based configuration
-│   │   ├── routers/        # REST endpoints (actions, servos, sensors, rgb, sound, status, agent, logs)
+│   │   ├── routers/        # REST endpoints (actions, servos, sensors, rgb, sound, status, agent, camera, logs)
 │   │   ├── services/       # PidogService, safety layer, LLM providers
 │   │   ├── websocket/      # WebSocket manager + sensor streaming
 │   │   ├── models/         # Pydantic request/response models
@@ -211,6 +211,16 @@ All endpoints are prefixed with `/api/v1`. Full interactive documentation is ava
 | GET | `/agent/skill` | View the agent skill document |
 | GET | `/agent/providers` | List LLM providers (Ollama, OpenRouter) and status |
 
+### Camera
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/camera/stream` | MJPEG live stream (use as `<img src="...">`) |
+| GET | `/camera/snapshot` | Capture a single JPEG frame |
+| GET | `/camera/status` | Camera state: running, fps, flip settings |
+| POST | `/camera/start` | Start the camera |
+| POST | `/camera/stop` | Stop the camera and release resources |
+
 ### Utilities
 
 | Method | Endpoint | Description |
@@ -301,6 +311,65 @@ Response:
 ```
 
 The agent skill document is at [`api/app/skill/pidog_skill.md`](api/app/skill/pidog_skill.md) and is returned by `GET /api/v1/agent/skill`.
+
+---
+
+## Camera
+
+The PiDog's camera is exposed as an MJPEG stream, making it straightforward to embed in a frontend:
+
+```html
+<img src="http://<pi>:8000/api/v1/camera/stream" />
+```
+
+### Setup
+
+Camera support requires the [SunFounder vilib library](https://github.com/sunfounder/vilib) (which wraps picamera2) on a Raspberry Pi:
+
+```bash
+git clone -b picamera2 https://github.com/sunfounder/vilib.git
+cd vilib && sudo python3 install.py
+```
+
+### Configuration
+
+```env
+PIDOG_CAMERA_ENABLED=true   # auto-start camera on boot (default: false)
+PIDOG_CAMERA_FPS=15         # target stream frame rate (default: 15)
+PIDOG_CAMERA_VFLIP=false    # vertical flip (default: false)
+PIDOG_CAMERA_HFLIP=false    # horizontal flip (default: false)
+```
+
+If `PIDOG_CAMERA_ENABLED` is `false` (the default), start the camera on demand:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/camera/start
+```
+
+### Frontend integration
+
+The MJPEG stream (`GET /camera/stream`) uses `multipart/x-mixed-replace` — the same format used by IP cameras and browsers. The simplest frontend integration:
+
+```html
+<!-- Stream auto-plays; browser disconnects cleanly when the tab closes -->
+<img src="/api/v1/camera/stream" alt="Live camera feed" />
+```
+
+For a snapshot (e.g. a preview thumbnail):
+
+```bash
+curl http://localhost:8000/api/v1/camera/snapshot --output frame.jpg
+```
+
+### Development without hardware
+
+With `PIDOG_MOCK_HARDWARE=true`, the camera endpoints are available but the stream returns placeholder frames. To render placeholder frames, install either:
+
+```bash
+pip install opencv-python   # or: pip install Pillow
+```
+
+Without either library the stream emits no frames (the frontend's `<img>` element will simply remain blank), but the endpoints themselves remain functional.
 
 ---
 

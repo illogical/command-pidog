@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Default LLM provider
     default_llm_provider: str = "ollama"
 
+    # Camera (requires vilib + picamera2 on real hardware)
+    camera_enabled: bool = False  # auto-start on boot when True
+    camera_fps: int = 15          # target frame rate for the MJPEG stream
+    camera_vflip: bool = False    # vertical flip
+    camera_hflip: bool = False    # horizontal flip
+
     model_config = {"env_prefix": "PIDOG_", "env_file": ".env"}
 
 

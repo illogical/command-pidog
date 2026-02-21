@@ -98,7 +98,8 @@ pidog-web/
 │   │   ├── useSensors.ts      # Live sensor data from WS
 │   │   ├── useRobotStatus.ts  # Battery, posture, servos from WS
 │   │   ├── useVoiceRecorder.ts
-│   │   └── useAgent.ts        # Agent chat state
+│   │   ├── useAgent.ts        # Agent chat state
+│   │   └── useCamera.ts       # Camera status + start/stop
 │   ├── stores/
 │   │   └── robotStore.ts      # Zustand store
 │   ├── components/
@@ -111,6 +112,10 @@ pidog-web/
 │   │   │   ├── ServoSliders.tsx    # Head/tail direct control
 │   │   │   ├── RGBControl.tsx      # LED style + color picker
 │   │   │   └── EmergencyStop.tsx
+│   │   ├── camera/
+│   │   │   ├── CameraStream.tsx    # <img> MJPEG element + placeholder
+│   │   │   ├── CameraControls.tsx  # Start/Stop + Snapshot buttons
+│   │   │   └── CameraStatusBar.tsx # Running state, fps, mock badge
 │   │   ├── sensors/
 │   │   │   ├── SensorDashboard.tsx
 │   │   │   ├── DistanceGauge.tsx
@@ -127,6 +132,7 @@ pidog-web/
 │   │       └── LogViewer.tsx
 │   ├── pages/
 │   │   ├── ControlPage.tsx     # Main robot control tab
+│   │   ├── CameraPage.tsx      # Live camera feed
 │   │   ├── SensorsPage.tsx     # Live sensor dashboard
 │   │   ├── AgentPage.tsx       # AI chat + voice
 │   │   └── LogsPage.tsx
@@ -272,6 +278,15 @@ export interface SoundPlayRequest {
   name: string
   volume?: number  // 0-100
 }
+
+// --- Camera types ---
+export interface CameraStatus {
+  running: boolean
+  mock: boolean
+  fps: number
+  vflip: boolean
+  hflip: boolean
+}
 ```
 
 ---
@@ -339,6 +354,14 @@ export const api = {
       const qs = new URLSearchParams(params as Record<string, string>).toString()
       return get<{ entries: LogEntry[]; total: number }>(`/api/v1/logs${qs ? `?${qs}` : ''}`)
     },
+  },
+  camera: {
+    status: () => get<CameraStatus>('/api/v1/camera/status'),
+    start: () => post<CameraStatus>('/api/v1/camera/start'),
+    stop: () => post<CameraStatus>('/api/v1/camera/stop'),
+    // snapshot: returns raw bytes — use as an <img src> or download link
+    snapshotUrl: () => `${API_BASE}/api/v1/camera/snapshot`,
+    streamUrl: () => `${API_BASE}/api/v1/camera/stream`,
   },
 }
 ```
@@ -550,24 +573,24 @@ export function useAgent() {
 
 ### Responsive Layout Strategy
 
-**Mobile (< 640px):** Bottom tab bar with 4 icons. Full-screen pages. Voice page is the default/home tab.
+**Mobile (< 640px):** Bottom tab bar with 5 icon-only tabs. Full-screen pages. Voice page is the default/home tab.
 
 **Tablet (640px–1024px):** Bottom tabs or top tabs. Content areas get more padding and can show two panels side by side on landscape.
 
 **Desktop (> 1024px):** Left sidebar navigation. Main content area + optional right panel for sensor data.
 
-The tab bar always shows 4 tabs: **Voice** | **Control** | **Sensors** | **Logs**
+The tab bar always shows 5 tabs: **Voice** | **Control** | **Camera** | **Sensors** | **Logs**
 
 ```
 Mobile portrait              Desktop
 ┌─────────────────┐         ┌──────────┬──────────────────────┐
 │   Status strip  │         │ Voice    │                      │
 │─────────────────│         │ Control  │   Page Content       │
-│                 │         │ Sensors  │                      │
-│   Page Content  │         │ Logs     │                      │
-│                 │         │          │                      │
+│                 │         │ Camera   │                      │
+│   Page Content  │         │ Sensors  │                      │
+│                 │         │ Logs     │                      │
 │─────────────────│         └──────────┴──────────────────────┘
-│ 🎤 🎛️ 📡 📋  │
+│ 🎤 🎛️ 📷 📡 📋 │
 └─────────────────┘
 ```
 
@@ -713,6 +736,169 @@ For precise manual control. Works on phones but is more comfortable on larger sc
 - **ServoSliders** — Three sliders for head: yaw (-90 to 90), roll (-70 to 70), pitch (-45 to 30). One slider for tail (-90 to 90). Debounced 150ms before calling the servo API.
 - **RGBControl** — Style dropdown (6 options), color swatch picker (9 presets), BPS slider, brightness slider.
 - **SoundPanel** — Grid of 12 sound file buttons. Tap to play.
+
+---
+
+### CameraPage (Secondary — Tablet/Desktop Primary)
+
+The live camera feed page. Designed for comfortable viewing on a tablet propped next to the robot, or a desktop browser. Works on a phone but the stream will be constrained to a narrower viewport.
+
+#### Hook: `useCamera`
+
+Polls `GET /camera/status` on mount to sync the initial running state, then reflects changes from `start()` / `stop()` calls. Does not need WebSocket — camera state changes infrequently.
+
+```typescript
+export function useCamera() {
+  const [status, setStatus] = useState<CameraStatus | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.camera.status().then(setStatus).catch(() => {})
+  }, [])
+
+  const start = async () => {
+    setLoading(true); setError(null)
+    try { setStatus(await api.camera.start()) }
+    catch (e) { setError(String(e)) }
+    finally { setLoading(false) }
+  }
+
+  const stop = async () => {
+    setLoading(true)
+    try { setStatus(await api.camera.stop()) }
+    catch (e) { setError(String(e)) }
+    finally { setLoading(false) }
+  }
+
+  return { status, loading, error, start, stop }
+}
+```
+
+#### Responsive layout
+
+**Mobile portrait (< 640px):**
+```
+┌─────────────────────────────┐
+│  🟢  Camera · 15fps         │  ← status strip (compact)
+├─────────────────────────────┤
+│                             │
+│  ┌─────────────────────┐   │
+│  │                     │   │
+│  │    Camera stream    │   │  ← 16:9, full viewport width
+│  │    (or placeholder) │   │
+│  │                     │   │
+│  └─────────────────────┘   │
+│                             │
+│  [  ▶ Start camera  ]       │  ← Start/Stop (full width)
+│  [  📷 Snapshot     ]       │  ← below start, secondary
+│                             │
+└─────────────────────────────┘
+│ 🎤  🎛️  📷  📡  📋       │
+└─────────────────────────────┘
+```
+
+**Tablet landscape (640px–1024px):**
+```
+┌──────────────────────────────────────────────┐
+│  📷 Camera  ·  🟢 Running  ·  15fps         │
+├────────────────────────┬─────────────────────┤
+│                        │  Status             │
+│                        │  ──────────────     │
+│    Camera stream       │  Running:  ✓        │
+│    (fills left ~65%)   │  FPS:      15       │
+│                        │  Mock:     No       │
+│                        │  ──────────────     │
+│                        │  [▶ Stop camera]    │
+│                        │  [📷 Snapshot  ]    │
+└────────────────────────┴─────────────────────┘
+│ 🎤  🎛️  📷  📡  📋                        │
+└──────────────────────────────────────────────┘
+```
+
+**Desktop (> 1024px):**
+```
+┌──────────┬──────────────────────────┬──────────────┐
+│ Voice    │                          │ Status       │
+│ Control  │    Camera stream         │ ──────────── │
+│ Camera   │    (fills main area,     │ Running: ✓   │
+│ Sensors  │     max 16:9 aspect)     │ FPS: 15      │
+│ Logs     │                          │ Mock: No     │
+│          │                          │ ──────────── │
+│          │                          │ [▶ Stop]     │
+│          │                          │ [📷 Snap]    │
+└──────────┴──────────────────────────┴──────────────┘
+```
+
+#### Component: `CameraStream`
+
+The core display component. Renders the MJPEG feed as a plain `<img>` element, which browsers handle natively — no JavaScript frame decoding required. The stream URL is set once when the camera starts; changing `src` is enough to reconnect.
+
+```typescript
+interface CameraStreamProps {
+  running: boolean
+  streamUrl: string
+}
+```
+
+**When running:** Renders `<img src={streamUrl} className="w-full aspect-video object-contain bg-black rounded-xl" />`. The `aspect-video` class (16:9) prevents layout shift while the first frame loads. `object-contain` with a black background letterboxes the feed if the camera's native aspect ratio differs.
+
+**When not running:** Renders a placeholder — a dark rounded rectangle with a centered camera icon (📷) and the text "Camera not started". On mock mode add a sub-label: "(mock mode — placeholder frames)".
+
+**Error recovery:** If the `<img>` fires an `onError` event while running (e.g., the Pi rebooted mid-stream), display a reconnect overlay on top of the last frame and attempt to reload the image src every 3 seconds by appending a cache-busting query param.
+
+#### Component: `CameraStatusBar`
+
+A compact one-line bar shown above the stream (inside the page, not the global status strip).
+
+```
+● Running  ·  15 fps  ·  [MOCK]
+```
+
+- Green dot when running, gray when stopped
+- FPS value from `status.fps`
+- `[MOCK]` amber badge shown only when `status.mock === true`, so hardware developers immediately know they're on a live feed
+
+#### Component: `CameraControls`
+
+Two buttons, stacked vertically on mobile, side-by-side on wider screens.
+
+**Start / Stop button:**
+- When not running: green `[▶ Start camera]` — calls `camera.start()`, shows spinner while loading
+- When running: gray `[⏹ Stop camera]` — calls `camera.stop()`
+- Disabled and shows spinner during any in-flight request
+
+**Snapshot button:**
+- Always shown but disabled when camera is not running
+- Label: `[📷 Snapshot]`
+- On click: opens `api.camera.snapshotUrl()` in a new tab (the browser's built-in "save image" flow handles download) — no custom fetch needed
+
+#### CameraPage composition
+
+```typescript
+export function CameraPage() {
+  const { status, loading, error, start, stop } = useCamera()
+  const streamUrl = api.camera.streamUrl()
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-4 p-4 h-full">
+      {/* Stream — fills available space, 16:9 capped */}
+      <div className="flex-1 min-w-0">
+        <CameraStatusBar status={status} />
+        <CameraStream running={status?.running ?? false} streamUrl={streamUrl} />
+      </div>
+
+      {/* Controls sidebar — right on desktop, below stream on mobile */}
+      <aside className="lg:w-56 shrink-0 flex flex-col gap-3">
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <CameraControls status={status} loading={loading} onStart={start} onStop={stop} />
+      </aside>
+    </div>
+  )
+}
+```
+
+The `flex-col lg:flex-row` pattern gives a single-column layout on phones and a side-by-side layout on desktop — matching the tablet/desktop wireframes above. On mobile, the stream always leads and the controls follow below.
 
 ---
 
@@ -883,6 +1069,33 @@ The `getSupportedMimeType()` function replicates the existing `MediaRecorder.isT
 - Filters log entries by level
 - New entries appear when store is updated
 
+**`CameraStream.test.tsx`:**
+- Renders `<img>` with the stream URL when `running=true`
+- Renders the placeholder (camera icon + "Camera not started" text) when `running=false`
+- Shows "(mock mode — placeholder frames)" sub-label when `running=true` and `mock=true`
+- `onError` on `<img>` triggers the reconnect overlay
+- After error, `src` is refreshed with a cache-busting param every 3 seconds
+
+**`CameraStatusBar.test.tsx`:**
+- Shows green dot + "Running" text when `status.running=true`
+- Shows gray dot + "Stopped" text when `status.running=false`
+- `[MOCK]` badge visible only when `status.mock=true`
+- Displays correct FPS value from `status.fps`
+
+**`CameraControls.test.tsx`:**
+- Shows "Start camera" button when `running=false`, "Stop camera" when `running=true`
+- Start button calls `onStart` on click
+- Stop button calls `onStop` on click
+- Both buttons are disabled (and show spinner) when `loading=true`
+- Snapshot button is disabled when `running=false`
+- Snapshot button opens `snapshotUrl` in a new tab when clicked
+
+**`useCamera.test.ts`:**
+- Fetches status on mount and stores result
+- `start()` calls `api.camera.start()`, updates status, sets loading during request
+- `stop()` calls `api.camera.stop()`, updates status, sets loading during request
+- `error` is set when `start()` or `stop()` throws; loading resets to false
+
 ### Hook tests
 
 **`useVoiceRecorder.test.ts`:**
@@ -1007,6 +1220,11 @@ WebSocket: `ws://<pi>:8000/api/v1/ws`
 | POST | `/agent/voice` | Multipart audio file |
 | GET | `/agent/skill` | Skill document text |
 | GET | `/agent/providers` | Ollama / OpenRouter status |
+| GET | `/camera/stream` | MJPEG stream — use as `<img src>` |
+| GET | `/camera/snapshot` | Single JPEG frame |
+| GET | `/camera/status` | `{running, mock, fps, vflip, hflip}` |
+| POST | `/camera/start` | Start camera, returns updated status |
+| POST | `/camera/stop` | Stop camera, returns updated status |
 | GET | `/logs` | `?limit=100&offset=0&level=INFO` |
 | GET | `/health` | `{"status":"ok"}` |
 

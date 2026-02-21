@@ -9,7 +9,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import actions, agent, logs, rgb, sensors, servos, sound, status
+from .routers import actions, agent, camera, logs, rgb, sensors, servos, sound, status
+from .services.camera_service import CameraService
 from .services.log_handler import BufferedLogHandler
 from .services.pidog_service import PidogService
 from .services.safety import SafetyValidator
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
         sensor_hz=settings.sensor_broadcast_hz,
         status_hz=settings.status_broadcast_hz,
     )
+    camera_service = CameraService()
 
     # Connect log handler to WebSocket manager
     log_handler.set_ws_manager(ws_manager)
@@ -59,19 +61,29 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.sensor_stream = sensor_stream
     app.state.log_handler = log_handler
+    app.state.camera = camera_service
 
     # Start sensor streaming
     sensor_stream.start()
 
+    # Auto-start camera if configured
+    if settings.camera_enabled:
+        try:
+            camera_service.start()
+        except Exception:
+            logger.warning("Camera auto-start failed — use POST /camera/start to retry")
+
     logger.info(
         f"PiDog API ready (mock={pidog_service._mock}, "
-        f"sensors@{settings.sensor_broadcast_hz}Hz)"
+        f"sensors@{settings.sensor_broadcast_hz}Hz, "
+        f"camera={'on' if camera_service.is_running else 'off'})"
     )
 
     yield
 
     # Shutdown
     logger.info("Shutting down PiDog API...")
+    camera_service.stop()
     sensor_stream.stop()
     pidog_service.close()
     logger.info("PiDog API shutdown complete")
@@ -105,6 +117,7 @@ app.include_router(rgb.router, prefix=PREFIX)
 app.include_router(sound.router, prefix=PREFIX)
 app.include_router(status.router, prefix=PREFIX)
 app.include_router(agent.router, prefix=PREFIX)
+app.include_router(camera.router, prefix=PREFIX)
 app.include_router(logs.router, prefix=PREFIX)
 
 
