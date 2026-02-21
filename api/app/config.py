@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_model: str = "meta-llama/llama-3-8b-instruct"
 
+    # Vision models (must support image inputs)
+    ollama_vision_model: str = "llava:7b"
+    openrouter_vision_model: str = "meta-llama/llama-3.2-11b-vision-instruct"
+
     # Default LLM provider
     default_llm_provider: str = "ollama"
 
