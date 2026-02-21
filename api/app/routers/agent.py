@@ -209,7 +209,7 @@ async def agent_vision(body: VisionRequest, request: Request):
         (skill_text + "\n\n" if skill_text else "")
         + f"Current sensor state: {sensor_context}\n\n"
         "You are being shown a live camera frame from your own on-board camera. "
-        "Analyse the image, then respond with a JSON object containing:\n"
+        "Analyze the image, then respond with a JSON object containing:\n"
         "- 'description': what you see (1-3 sentences)\n"
         "- 'answer': your spoken reaction as PiDog\n"
         "- 'actions': list of PiDog action names to perform (may be empty)"

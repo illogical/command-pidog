@@ -137,3 +137,10 @@ dist
 config/command-pidog.json
 voice-commands/config.json
 config/config.json
+
+# Python
+api/.venv/
+api/__pycache__/
+api/**/__pycache__/
+api/**/*.pyc
+api/pidog_api.egg-info/
