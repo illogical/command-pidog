@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     camera_vflip: bool = False    # vertical flip
     camera_hflip: bool = False    # horizontal flip
 
+    # Idle animation (see services/idle_animator.py)
+    # Replaces the built-in head-bobbing standby loop to avoid stressing the
+    # faulty neck actuator. Tail wags every N seconds + continuous RGB breath.
+    idle_enabled: bool = True
+    idle_interval_min_s: float = 5.0    # min seconds between tail wags
+    idle_interval_max_s: float = 10.0   # max seconds between tail wags
+    idle_rgb_style: str = "breath"      # RGB style while awaiting commands
+    idle_rgb_color: str = "cyan"        # RGB color while awaiting commands
+    idle_rgb_bps: float = 0.5           # breath speed (beats per second)
+    idle_rgb_brightness: float = 0.7    # brightness 0-1
+
     # Neck oscillation detection (see services/neck_monitor.py)
     neck_oscillation_enabled: bool = True
     neck_oscillation_variance_threshold: float = 0.3   # degrees² (pitch²+roll²) — at standby

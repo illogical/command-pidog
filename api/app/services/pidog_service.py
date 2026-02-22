@@ -172,6 +172,13 @@ class PidogService:
             self._action_flow = ActionFlow(self._dog)
 
         self._action_flow.start()
+
+        # Disable the built-in head-bobbing standby animation. The IdleAnimator
+        # service (started in main.py lifespan) provides a tail-wag + RGB idle
+        # instead, which avoids stressing the problematic neck/head actuator.
+        if hasattr(self._action_flow, 'standby_actions'):
+            self._action_flow.standby_actions = []
+
         logger.info("PidogService initialized")
 
     @property
@@ -257,11 +264,29 @@ class PidogService:
 
     def get_queue_status(self) -> ActionQueueStatus:
         af = self._action_flow
+
+        # Real ActionFlow stores state in thread_action_state (a StrEnum);
+        # MockActionFlow stores it in status (a plain string).
+        state = str(
+            getattr(af, "thread_action_state", None)
+            or getattr(af, "status", "standby")
+        )
+
+        # Real ActionFlow uses action_queue (Queue); Mock uses _queue (list).
+        if hasattr(af, "action_queue"):
+            queue_size = af.action_queue.qsize()
+        else:
+            queue_size = len(getattr(af, "_queue", []))
+
+        # Real ActionFlow posture is a Posetures enum; Mock is a plain string.
+        posture_val = getattr(af, "posture", "lie")
+        posture = posture_val.name.lower() if hasattr(posture_val, "name") else str(posture_val)
+
         return ActionQueueStatus(
-            state=getattr(af, "status", "standby"),
+            state=state,
             current_action=getattr(af, "_current_action", None),
-            queue_size=len(getattr(af, "_queue", [])),
-            posture=getattr(af, "posture", "lie"),
+            queue_size=queue_size,
+            posture=posture,
         )
 
     def get_status(self) -> RobotStatus:

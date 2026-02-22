@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers import actions, agent, camera, logs, rgb, sensors, servos, sound, status
 from .services.camera_service import CameraService
+from .services.idle_animator import IdleAnimator
 from .services.log_handler import BufferedLogHandler
 from .services.neck_monitor import NeckOscillationMonitor
 from .services.pidog_service import PidogService
@@ -82,6 +83,7 @@ async def lifespan(app: FastAPI):
     )
     camera_service = CameraService()
     neck_monitor = NeckOscillationMonitor(pidog_service, settings)
+    idle_animator = IdleAnimator(pidog_service, settings)
 
     # Optional dedicated log file for neck monitor (DEBUG-level detail)
     if settings.neck_oscillation_log_file:
@@ -98,10 +100,12 @@ async def lifespan(app: FastAPI):
     app.state.log_handler = log_handler
     app.state.camera = camera_service
     app.state.neck_monitor = neck_monitor
+    app.state.idle_animator = idle_animator
 
-    # Start sensor streaming and neck oscillation monitor
+    # Start sensor streaming, neck monitor, and idle animator
     sensor_stream.start()
     neck_monitor.start()
+    idle_animator.start()
 
     # Auto-start camera if configured
     if settings.camera_enabled:
@@ -120,6 +124,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down PiDog API...")
+    idle_animator.stop()
     neck_monitor.stop()
     camera_service.stop()
     sensor_stream.stop()
