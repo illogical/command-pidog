@@ -12,6 +12,11 @@ dependencies = [
     "websockets>=14.0",
     "python-multipart>=0.0.12",
     "numpy>=1.26.0",
+    "robot-hat",
+    "smbus",
+    "spidev",
+    "gpiozero",
+    "readchar",
 ]
 
 [project.optional-dependencies]
