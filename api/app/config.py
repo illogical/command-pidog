@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     # PiDog
     mock_hardware: bool = False
-    pidog_sound_dir: str = "~/pidog/sounds/"
+    pidog_sound_dir: str = "sounds/"
 
     # Safety
     min_battery_voltage: float = 6.5

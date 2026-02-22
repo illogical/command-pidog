@@ -163,12 +163,12 @@ class PidogService:
         else:
             logger.info("Initializing PiDog with REAL hardware")
             # Imports only when using real hardware (requires I2C/GPIO)
-            import sys
-            sys.path.insert(0, str(settings.pidog_sound_dir))
+            from pathlib import Path
             from pidog import Pidog
             from pidog.action_flow import ActionFlow
 
             self._dog = Pidog()
+            self._dog.SOUND_DIR = str(Path(settings.pidog_sound_dir).expanduser()) + "/"
             self._action_flow = ActionFlow(self._dog)
 
         self._action_flow.start()
