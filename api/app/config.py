@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     camera_vflip: bool = False    # vertical flip
     camera_hflip: bool = False    # horizontal flip
 
+    # Neck oscillation detection (see services/neck_monitor.py)
+    neck_oscillation_enabled: bool = True
+    neck_oscillation_variance_threshold: float = 0.3  # degrees² (pitch²+roll²)
+    neck_oscillation_window_size: int = 40             # samples; 40@20Hz = 2s window
+    neck_oscillation_poll_hz: float = 20.0             # IMU sample rate for monitor
+    neck_oscillation_stabilize_speed: int = 15         # servo speed for re-command (0-100)
+    neck_oscillation_cooldown_s: float = 3.0           # min seconds between stabilize attempts
+    neck_oscillation_trigger_count: int = 10           # consecutive high-variance samples to trigger
+
     model_config = {"env_prefix": "PIDOG_", "env_file": ".env"}
 
 

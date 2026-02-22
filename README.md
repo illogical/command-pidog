@@ -77,9 +77,9 @@ On the Raspberry Pi (Python 3.11+):
 
 ```bash
 cd api
-python3 -m venv .venv
+python3 -m venv --system-site-packages .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e "."
 ```
 
 ### 3. Start the API server

@@ -53,3 +53,15 @@ async def get_sound(request: Request):
         if detected:
             direction = service.dog.ears.read()
     return SoundReading(direction=direction, detected=detected)
+
+
+@router.get("/neck-oscillation")
+async def get_neck_oscillation(request: Request):
+    """Get neck oscillation detection metrics.
+
+    Returns current variance, oscillation state, stabilization history, and
+    configuration. Variance is the sum of IMU pitch and roll population
+    variance over the sliding sample window.
+    """
+    monitor = request.app.state.neck_monitor
+    return monitor.get_metrics()

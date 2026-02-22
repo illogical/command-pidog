@@ -12,6 +12,7 @@ from .config import settings
 from .routers import actions, agent, camera, logs, rgb, sensors, servos, sound, status
 from .services.camera_service import CameraService
 from .services.log_handler import BufferedLogHandler
+from .services.neck_monitor import NeckOscillationMonitor
 from .services.pidog_service import PidogService
 from .services.safety import SafetyValidator
 from .websocket.manager import ConnectionManager, SensorStream
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
         status_hz=settings.status_broadcast_hz,
     )
     camera_service = CameraService()
+    neck_monitor = NeckOscillationMonitor(pidog_service, settings)
 
     # Connect log handler to WebSocket manager
     log_handler.set_ws_manager(ws_manager)
@@ -62,9 +64,11 @@ async def lifespan(app: FastAPI):
     app.state.sensor_stream = sensor_stream
     app.state.log_handler = log_handler
     app.state.camera = camera_service
+    app.state.neck_monitor = neck_monitor
 
-    # Start sensor streaming
+    # Start sensor streaming and neck oscillation monitor
     sensor_stream.start()
+    neck_monitor.start()
 
     # Auto-start camera if configured
     if settings.camera_enabled:
@@ -83,6 +87,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down PiDog API...")
+    neck_monitor.stop()
     camera_service.stop()
     sensor_stream.stop()
     pidog_service.close()
