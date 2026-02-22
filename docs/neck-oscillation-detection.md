@@ -4,6 +4,8 @@
 
 The PiDog's neck yaw servo (left-right head motion) spontaneously oscillates at rest — a condition known as **servo hunting**. The servo's internal PID controller overshoots the commanded target position and keeps correcting, producing a visible left-right shaking that only stops when the head is manually held in place.
 
+The idle animation (the `waiting` action) appears to mechanically destabilize the yaw servo, triggering hunting episodes.
+
 ## Root Cause Analysis
 
 This is primarily a **hardware/mechanical issue**. Possible contributors:
@@ -30,50 +32,50 @@ oscillation detected when:
 
 **Sensitivity:** This detects slow hunting (1–5Hz). Ultra-fast oscillations (>10Hz) may not couple visibly into pitch/roll.
 
+## Action-Awareness
+
+The idle animation legitimately moves roll/pitch (±7°/±5°), which produces IMU variance that would otherwise trigger false positives. The monitor uses **two thresholds**:
+
+- **Standby threshold** (`0.3°²`) — used when the action flow is idle. Sensitive enough to catch hunting.
+- **Action threshold** (`2.0°²`) — used when an action is actively running. Only triggers on extreme variance.
+
+When `suppress_during_actions=True` (default), the stabilizer will not send commands while an action is running, because any command would be immediately overwritten by the next animation step.
+
+Oscillation is still **reported** (visible in `/sensors/neck-oscillation` and the `action_suppressed` field) even when stabilization is suppressed.
+
 ## Stabilization Strategy
 
-When oscillation is detected, re-issue the last commanded head position at a **low speed value** (e.g., `speed=15`). This gives the servo a fresh, low-aggression target and may interrupt the hunting cycle.
+When oscillation is detected and the robot is at standby, re-issue the last commanded head position at a **low speed value** (e.g., `speed=15`). This gives the servo a fresh, low-aggression target and may interrupt the hunting cycle.
 
 A configurable cooldown prevents the stabilizer from spamming commands.
 
-## Implementation Plan
+## Logging
 
-### New file: `api/app/services/neck_monitor.py`
+To reduce console noise, per-attempt stabilize messages are logged at **DEBUG** level. Only oscillation detected/cleared events appear at INFO/WARNING in the main console.
 
-```
-NeckOscillationMonitor
-├── __init__(pidog_service, settings, emit_log_cb)
-├── run()               → background asyncio task at 20Hz
-│   ├── polls _dog.pitch and _dog.roll directly
-│   ├── updates deque(maxlen=window_size)
-│   ├── computes variance over window
-│   ├── triggers _stabilize() when threshold exceeded for N samples
-│   └── emits WebSocket log event on oscillation start/stop
-├── _stabilize()        → re-commands last yaw at low speed
-└── get_metrics() → dict  → consumed by REST endpoint
+For detailed debug logging to a file:
+```bash
+PIDOG_NECK_OSCILLATION_LOG_FILE=/var/log/pidog/neck.log uvicorn app.main:app ...
 ```
 
-### Modified files
+The file captures all DEBUG-level messages (including every stabilize attempt) without cluttering the console.
 
-| File | Change |
-|------|--------|
-| `api/app/config.py` | Add 7 neck oscillation settings (see below) |
-| `api/app/main.py` | Instantiate monitor in lifespan; `asyncio.create_task()` on startup, cancel on shutdown |
-| `api/app/routers/sensors.py` | Add `GET /api/v1/sensors/neck-oscillation` endpoint |
-
-### Configuration (all via `PIDOG_` env prefix)
+## Configuration (all via `PIDOG_` env prefix)
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `PIDOG_NECK_OSCILLATION_ENABLED` | `true` | Enable/disable the monitor |
-| `PIDOG_NECK_OSCILLATION_VARIANCE_THRESHOLD` | `0.3` | Variance (degrees²) that triggers detection |
+| `PIDOG_NECK_OSCILLATION_VARIANCE_THRESHOLD` | `0.3` | Variance (degrees²) that triggers detection at standby |
+| `PIDOG_NECK_OSCILLATION_ACTION_THRESHOLD` | `2.0` | Variance threshold while an action is running |
+| `PIDOG_NECK_OSCILLATION_SUPPRESS_DURING_ACTIONS` | `true` | Skip stabilize commands while action flow is active |
 | `PIDOG_NECK_OSCILLATION_WINDOW_SIZE` | `40` | Sliding window samples (40 @ 20Hz = 2s) |
 | `PIDOG_NECK_OSCILLATION_POLL_HZ` | `20.0` | IMU sampling rate for the monitor |
 | `PIDOG_NECK_OSCILLATION_STABILIZE_SPEED` | `15` | Servo speed used in re-command (0–100) |
 | `PIDOG_NECK_OSCILLATION_COOLDOWN_S` | `3.0` | Minimum seconds between stabilize attempts |
 | `PIDOG_NECK_OSCILLATION_TRIGGER_COUNT` | `10` | Consecutive high-variance samples before alert |
+| `PIDOG_NECK_OSCILLATION_LOG_FILE` | `""` | Path for detailed debug log file; empty = disabled |
 
-### New REST endpoint
+## REST Endpoint
 
 ```
 GET /api/v1/sensors/neck-oscillation
@@ -83,55 +85,44 @@ Response:
 ```json
 {
   "oscillating": false,
+  "action_suppressed": false,
   "variance": 0.12,
   "threshold": 0.3,
+  "action_threshold": 2.0,
   "sample_count": 40,
   "last_stabilize_at": null,
   "stabilize_count_session": 0,
-  "enabled": true
+  "enabled": true,
+  "suppress_during_actions": true
 }
 ```
 
-### WebSocket events
+`action_suppressed: true` means oscillation was detected but stabilization was skipped because the action flow was running.
 
-When oscillation is detected or clears, a message is emitted on the `logs` channel:
+## WebSocket Events
+
+Oscillation detected/cleared events are emitted on the `logs` channel at WARNING/INFO level and appear in the main console:
 
 ```json
-{"type": "logs", "data": {"level": "WARNING", "message": "Neck oscillation detected — variance=0.45 — stabilizing"}}
-{"type": "logs", "data": {"level": "INFO",    "message": "Neck oscillation cleared — variance=0.08"}}
+{"type": "logs", "data": {"level": "WARNING", "message": "Neck oscillation detected — variance=0.64 (threshold=0.3)"}}
+{"type": "logs", "data": {"level": "INFO",    "message": "Neck oscillation cleared — variance=0.19"}}
 ```
 
-## Reused Patterns
+Per-attempt stabilize commands are DEBUG-only and do **not** appear in the WebSocket logs channel unless debug mode is enabled.
 
-- Dependency injection via `request.app.state` — same as `pidog`, `safety`
-- Background asyncio task — same pattern as `SensorStream` in `manager.py`
-- Config via `Pydantic Settings` with `PIDOG_` prefix — same as `config.py`
-- `logs` channel WebSocket events — same as existing logger integration
+## Tuning Guide
 
-## Testing
-
-### Without hardware (`PIDOG_MOCK_HARDWARE=true`)
-
-1. Set a very low threshold: `PIDOG_NECK_OSCILLATION_VARIANCE_THRESHOLD=0.001`
-2. Write a test that mutates `MockPidog.pitch`/`MockPidog.roll` in a loop to simulate oscillation
-3. Assert `GET /sensors/neck-oscillation` returns `oscillating: true`
-4. Assert a `logs` WebSocket event was emitted
-
-### On real hardware
-
-1. Connect WebSocket and subscribe to `logs` channel
-2. Let the dog sit still — verify no false positives during calm state
-3. Trigger the oscillation — verify a log event fires within ~2 seconds
-4. Verify the stabilize re-command interrupts hunting
-
-### Tuning threshold
-
-- If false positives occur during normal intentional movement, **increase** `PIDOG_NECK_OSCILLATION_VARIANCE_THRESHOLD`
-- If oscillation goes undetected, **decrease** threshold or **decrease** `PIDOG_NECK_OSCILLATION_TRIGGER_COUNT`
+| Symptom | Adjustment |
+|---------|------------|
+| False positives at rest | Raise `VARIANCE_THRESHOLD` toward `0.5` |
+| False positives during animation | Raise `ACTION_THRESHOLD` or keep `SUPPRESS_DURING_ACTIONS=true` |
+| Oscillation not detected | Lower `VARIANCE_THRESHOLD` or lower `TRIGGER_COUNT` |
+| Stabilizer fires too often | Raise `COOLDOWN_S` |
+| Stabilizer doesn't help | Try higher `STABILIZE_SPEED` (30–50) or investigate hardware |
 
 ## Limitations
 
-- **No ground truth:** Without servo feedback, detection is indirect. False positives during vigorous intentional movements are possible.
+- **No ground truth:** Without servo feedback, detection is indirect. The monitor cannot guarantee it is measuring hunting vs intentional motion.
 - **Coupling assumption:** If the head pivot is mechanically isolated, yaw oscillation may not register in pitch/roll IMU readings.
-- **Sampling ceiling:** The IMU may not support sustained 20Hz polling reliably on all hardware. This can be tuned via `PIDOG_NECK_OSCILLATION_POLL_HZ`.
+- **Action flow conflict:** Stabilize commands during active actions are overwritten immediately. Suppression is the correct behavior in that case.
 - **True fix:** Adjust servo deadband in firmware (if accessible) or mechanically tighten/replace the pivot. This API-level solution treats symptoms.

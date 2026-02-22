@@ -33,6 +33,35 @@ root_logger.addHandler(console)
 logger = logging.getLogger("pidog.app")
 
 
+def _setup_neck_log_file(path: str) -> None:
+    """Attach a DEBUG-level file handler to the neck monitor logger.
+
+    This captures all neck monitor messages (including per-attempt stabilize
+    commands logged at DEBUG) to a dedicated file without cluttering the
+    main console output, which is filtered to INFO+ by default.
+    """
+    neck_logger = logging.getLogger("pidog.neck_monitor")
+    # Prevent DEBUG messages from propagating to the root handler (console/WS)
+    neck_logger.propagate = False
+    # Still forward WARNING+ to the root logger so important alerts appear
+    class _PassWarnings(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return record.levelno >= logging.WARNING
+
+    root_fwd = logging.StreamHandler()
+    root_fwd.addFilter(_PassWarnings())
+    root_fwd.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s %(message)s"))
+    neck_logger.addHandler(root_fwd)
+
+    # File handler — captures everything at DEBUG+
+    fh = logging.FileHandler(path, encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    neck_logger.addHandler(fh)
+    neck_logger.setLevel(logging.DEBUG)
+    logger.info(f"Neck monitor detailed log → {path}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize hardware and background tasks on startup, clean up on shutdown."""
@@ -53,6 +82,10 @@ async def lifespan(app: FastAPI):
     )
     camera_service = CameraService()
     neck_monitor = NeckOscillationMonitor(pidog_service, settings)
+
+    # Optional dedicated log file for neck monitor (DEBUG-level detail)
+    if settings.neck_oscillation_log_file:
+        _setup_neck_log_file(settings.neck_oscillation_log_file)
 
     # Connect log handler to WebSocket manager
     log_handler.set_ws_manager(ws_manager)

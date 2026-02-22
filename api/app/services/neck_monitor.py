@@ -12,6 +12,18 @@ Strategy:
   - When variance exceeds a threshold for K consecutive readings, declare
     oscillation and attempt active stabilization by re-issuing the last
     commanded head position at a low speed value
+
+Action-awareness:
+  - When the action flow is actively running (state != "standby"), the
+    head is moving intentionally and will produce legitimate IMU variance.
+    In that mode, suppression is enabled by default and a higher threshold
+    is used, so the monitor does not fight the action flow.
+
+Logging:
+  - WARNING: oscillation detected / cleared (important, shown in console)
+  - DEBUG:   per-attempt stabilize commands and action-suppression detail
+  - An optional dedicated log file (PIDOG_NECK_OSCILLATION_LOG_FILE) captures
+    DEBUG-level messages without polluting the main console output.
 """
 
 from __future__ import annotations
@@ -45,6 +57,8 @@ class NeckOscillationMonitor:
         self._service = pidog_service
         self._enabled: bool = settings.neck_oscillation_enabled
         self._threshold: float = settings.neck_oscillation_variance_threshold
+        self._action_threshold: float = settings.neck_oscillation_action_threshold
+        self._suppress_during_actions: bool = settings.neck_oscillation_suppress_during_actions
         self._window: int = settings.neck_oscillation_window_size
         self._poll_interval: float = 1.0 / settings.neck_oscillation_poll_hz
         self._stabilize_speed: int = settings.neck_oscillation_stabilize_speed
@@ -57,12 +71,14 @@ class NeckOscillationMonitor:
 
         # Public state (read by the REST endpoint)
         self.oscillating: bool = False
+        self.action_suppressed: bool = False
         self.variance: float = 0.0
 
         # Internal state
         self._consecutive_hits: int = 0
         self._last_stabilize_at: float | None = None
         self._stabilize_count: int = 0
+        self._suppression_logged: bool = False  # avoid repeating suppression message
 
         self._task: asyncio.Task | None = None
 
@@ -75,6 +91,8 @@ class NeckOscillationMonitor:
         logger.info(
             f"NeckOscillationMonitor started "
             f"(enabled={self._enabled}, threshold={self._threshold}, "
+            f"action_threshold={self._action_threshold}, "
+            f"suppress_during_actions={self._suppress_during_actions}, "
             f"poll={1 / self._poll_interval:.0f}Hz, window={self._window})"
         )
 
@@ -99,13 +117,20 @@ class NeckOscillationMonitor:
                 self._rolls.append(dog.roll)
 
                 if len(self._pitches) >= self._window:
+                    # Check action state to select the right threshold
+                    queue_status = self._service.get_queue_status()
+                    action_running = queue_status.state != "standby"
+                    threshold = self._action_threshold if action_running else self._threshold
+
                     self.variance = _variance(self._pitches) + _variance(self._rolls)
 
-                    if self.variance > self._threshold:
+                    if self.variance > threshold:
                         self._consecutive_hits += 1
                     else:
                         if self.oscillating:
                             self.oscillating = False
+                            self.action_suppressed = False
+                            self._suppression_logged = False
                             logger.info(
                                 f"Neck oscillation cleared — variance={self.variance:.4f}"
                             )
@@ -116,13 +141,32 @@ class NeckOscillationMonitor:
                         and not self.oscillating
                     ):
                         self.oscillating = True
-                        logger.warning(
-                            f"Neck oscillation detected — variance={self.variance:.4f} "
-                            f"(threshold={self._threshold})"
-                        )
+                        suppressed = action_running and self._suppress_during_actions
+                        self.action_suppressed = suppressed
+                        if suppressed:
+                            logger.debug(
+                                f"Neck oscillation detected but suppressed — "
+                                f"action '{queue_status.current_action}' is running, "
+                                f"variance={self.variance:.4f}"
+                            )
+                            self._suppression_logged = True
+                        else:
+                            logger.warning(
+                                f"Neck oscillation detected — variance={self.variance:.4f} "
+                                f"(threshold={threshold})"
+                            )
 
                     if self.oscillating:
-                        await self._maybe_stabilize()
+                        suppressed = action_running and self._suppress_during_actions
+                        self.action_suppressed = suppressed
+                        if not suppressed:
+                            await self._maybe_stabilize()
+                        elif not self._suppression_logged:
+                            logger.debug(
+                                f"Neck oscillation ongoing — suppressed while "
+                                f"'{queue_status.current_action}' runs"
+                            )
+                            self._suppression_logged = True
 
                 await asyncio.sleep(self._poll_interval)
 
@@ -155,7 +199,8 @@ class NeckOscillationMonitor:
 
         self._last_stabilize_at = now
         self._stabilize_count += 1
-        logger.warning(
+        # DEBUG — per-attempt messages were too noisy at WARNING level
+        logger.debug(
             f"Neck stabilize command sent (#{self._stabilize_count}) — "
             f"yaw={yaw:.1f}°, speed={self._stabilize_speed}"
         )
@@ -167,10 +212,13 @@ class NeckOscillationMonitor:
     def get_metrics(self) -> dict:
         return {
             "oscillating": self.oscillating,
+            "action_suppressed": self.action_suppressed,
             "variance": round(self.variance, 4),
             "threshold": self._threshold,
+            "action_threshold": self._action_threshold,
             "sample_count": len(self._pitches),
             "last_stabilize_at": self._last_stabilize_at,
             "stabilize_count_session": self._stabilize_count,
             "enabled": self._enabled,
+            "suppress_during_actions": self._suppress_during_actions,
         }
