@@ -100,7 +100,43 @@ The API is now available at:
 - Interactive docs: `http://localhost:8000/api/v1/docs`
 - WebSocket: `ws://localhost:8000/api/v1/ws`
 
-### 4. (Optional) Run as a systemd service on the Pi
+### 4. Configure audio (HiFiBerry DAC)
+
+The PiDog uses a HiFiBerry DAC (ALSA card 1) for audio output. On a fresh Pi, ALSA defaults to the HDMI output (card 0) and PulseAudio intercepts the `default` device — both of which prevent sound from working when the server runs over SSH.
+
+**Step 1 — Set HiFiBerry as the default ALSA device:**
+
+```bash
+sudo tee /etc/asound.conf << 'EOF'
+defaults.pcm.card 1
+defaults.ctl.card 1
+
+pcm.!default {
+    type plug
+    slave.pcm "hw:1,0"
+}
+EOF
+```
+
+The `type plug` slave is required because the HiFiBerry DAC only accepts stereo input — ALSA's plug layer handles the mono→stereo upmix transparently.
+
+**Step 2 — Disable PulseAudio** (it autospawns even over SSH and overrides `/etc/asound.conf`):
+
+```bash
+systemctl --user disable --now pulseaudio.socket pulseaudio.service
+pulseaudio --kill 2>/dev/null || true
+```
+
+**Verify:**
+
+```bash
+aplay -L | grep -A1 "^default"
+# Expected: hw:CARD=sndrpihifiberry,DEV=0
+```
+
+The API server already sets `SDL_AUDIODRIVER=alsa` at startup (in `app/main.py`) to ensure `pygame.mixer` uses ALSA directly rather than attempting PulseAudio.
+
+### 5. (Optional) Run as a systemd service on the Pi
 
 ```bash
 sudo tee /etc/systemd/system/pidog-api.service > /dev/null <<EOF
@@ -122,7 +158,7 @@ EOF
 sudo systemctl enable --now pidog-api
 ```
 
-### 5. Start Tailscale (for remote access)
+### 6. Start Tailscale (for remote access)
 
 Set up your Tailscale auth key:
 
