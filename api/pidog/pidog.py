@@ -636,10 +636,9 @@ class Pidog():
         :param volume: volume, 0-100
         :type volume: int
         """
-        if not is_run_with_root and not hasattr(self, "speak_first"):
-            self.speak_first = True
-            warn("Play sound needs to be run with sudo.")
-        status, _ = utils.run_command('sudo killall pulseaudio') # Solve the problem that there is no sound when running in the vnc environment
+        # Kill only the current user's PulseAudio session if running (VNC workaround).
+        # Using pkill avoids requiring sudo and is safe to run over SSH.
+        utils.run_command('pkill -u "$(id -un)" pulseaudio || true')
 
         if os.path.isfile(name):
             self.music.sound_play_threading(name, volume)
@@ -660,11 +659,10 @@ class Pidog():
         :param volume: volume, 0-100
         :type volume: int
         """
-        if not is_run_with_root and not hasattr(self, "speak_first"):
-            self.speak_first = True
-            warn("Play sound needs to be run with sudo.")
-        _status, _ = utils.run_command('sudo killall pulseaudio') # Solve the problem that there is no sound when running in the vnc environment
-        
+        # Kill only the current user's PulseAudio session if running (VNC workaround).
+        # Using pkill avoids requiring sudo and is safe to run over SSH.
+        utils.run_command('pkill -u "$(id -un)" pulseaudio || true')
+
         if os.path.isfile(name):
             self.music.sound_play(name, volume)
         elif os.path.isfile(self.SOUND_DIR+name+'.mp3'):

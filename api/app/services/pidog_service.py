@@ -168,7 +168,12 @@ class PidogService:
             from pidog.action_flow import ActionFlow
 
             self._dog = Pidog()
-            self._dog.SOUND_DIR = str(Path(settings.pidog_sound_dir).expanduser()) + "/"
+            sound_path = Path(settings.pidog_sound_dir).expanduser()
+            if not sound_path.is_absolute():
+                # Anchor relative paths to the api/ directory, not process cwd
+                sound_path = Path(__file__).parent.parent / sound_path
+            self._dog.SOUND_DIR = str(sound_path) + "/"
+            logger.info(f"Sound directory: {self._dog.SOUND_DIR}")
             self._action_flow = ActionFlow(self._dog)
 
         self._action_flow.start()

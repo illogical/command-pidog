@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -67,6 +68,10 @@ def _setup_head_log_file(path: str) -> None:
 async def lifespan(app: FastAPI):
     """Initialize hardware and background tasks on startup, clean up on shutdown."""
     logger.info("Starting PiDog API...")
+
+    # Force SDL to use ALSA directly — avoids PulseAudio dependency over SSH
+    # and ensures pygame.mixer uses the correct HiFiBerry DAC output.
+    os.environ.setdefault("SDL_AUDIODRIVER", "alsa")
 
     # Initialize services
     pidog_service = PidogService()
