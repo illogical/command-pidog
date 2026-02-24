@@ -1,10 +1,10 @@
-"""Tests for neck oscillation detection and stabilization."""
+"""Tests for head oscillation detection and stabilization."""
 
 import asyncio
 
 import pytest
 
-from app.services.neck_monitor import NeckOscillationMonitor, _variance
+from app.services.head_monitor import HeadOscillationMonitor, _variance
 
 
 # ---------------------------------------------------------------------------
@@ -34,15 +34,15 @@ def test_variance_single_element():
 # ---------------------------------------------------------------------------
 
 class _FakeSettings:
-    neck_oscillation_enabled = True
-    neck_oscillation_variance_threshold = 0.3
-    neck_oscillation_action_threshold = 2.0
-    neck_oscillation_suppress_during_actions = True
-    neck_oscillation_window_size = 10
-    neck_oscillation_poll_hz = 100.0   # fast for tests
-    neck_oscillation_stabilize_speed = 15
-    neck_oscillation_cooldown_s = 0.0  # no cooldown in tests
-    neck_oscillation_trigger_count = 3
+    head_oscillation_enabled = True
+    head_oscillation_variance_threshold = 0.3
+    head_oscillation_action_threshold = 2.0
+    head_oscillation_suppress_during_actions = True
+    head_oscillation_window_size = 10
+    head_oscillation_poll_hz = 100.0   # fast for tests
+    head_oscillation_stabilize_speed = 15
+    head_oscillation_cooldown_s = 0.0  # no cooldown in tests
+    head_oscillation_trigger_count = 3
 
 
 class _FakeDog:
@@ -52,7 +52,7 @@ class _FakeDog:
         self.head_current_angles = [0.0, 0.0, 0.0]
 
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -83,7 +83,7 @@ class _FakeService:
 # Integration tests — run the monitor for a short time
 # ---------------------------------------------------------------------------
 
-async def _run_monitor_briefly(monitor: NeckOscillationMonitor, seconds: float) -> None:
+async def _run_monitor_briefly(monitor: HeadOscillationMonitor, seconds: float) -> None:
     monitor.start()
     await asyncio.sleep(seconds)
     monitor.stop()
@@ -94,7 +94,7 @@ async def _run_monitor_briefly(monitor: NeckOscillationMonitor, seconds: float) 
 @pytest.mark.asyncio
 async def test_no_oscillation_when_imu_stable():
     service = _FakeService(pitch=0.0, roll=0.0)
-    monitor = NeckOscillationMonitor(service, _FakeSettings())
+    monitor = HeadOscillationMonitor(service, _FakeSettings())
     await _run_monitor_briefly(monitor, 0.3)
     assert not monitor.oscillating
 
@@ -104,10 +104,10 @@ async def test_oscillation_detected_with_high_variance():
     """Simulate oscillating IMU by alternating pitch values."""
     service = _FakeService()
     settings = _FakeSettings()
-    settings.neck_oscillation_variance_threshold = 0.01  # very sensitive
-    settings.neck_oscillation_trigger_count = 3
+    settings.head_oscillation_variance_threshold = 0.01  # very sensitive
+    settings.head_oscillation_trigger_count = 3
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
 
     async def _oscillate():
         for i in range(60):
@@ -120,7 +120,7 @@ async def test_oscillation_detected_with_high_variance():
     await asyncio.sleep(0.05)
 
     assert monitor.oscillating
-    assert monitor.variance > settings.neck_oscillation_variance_threshold
+    assert monitor.variance > settings.head_oscillation_variance_threshold
 
 
 @pytest.mark.asyncio
@@ -128,11 +128,11 @@ async def test_stabilize_called_when_oscillating_at_standby():
     """Verify set_head is called during detected oscillation when no action runs."""
     service = _FakeService(action_state="standby")
     settings = _FakeSettings()
-    settings.neck_oscillation_variance_threshold = 0.01
-    settings.neck_oscillation_trigger_count = 3
-    settings.neck_oscillation_cooldown_s = 0.0
+    settings.head_oscillation_variance_threshold = 0.01
+    settings.head_oscillation_trigger_count = 3
+    settings.head_oscillation_cooldown_s = 0.0
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
 
     async def _oscillate():
         for i in range(80):
@@ -147,7 +147,7 @@ async def test_stabilize_called_when_oscillating_at_standby():
     assert monitor._stabilize_count > 0
     assert len(service.set_head_calls) > 0
     for call in service.set_head_calls:
-        assert call[3] == settings.neck_oscillation_stabilize_speed
+        assert call[3] == settings.head_oscillation_stabilize_speed
 
 
 @pytest.mark.asyncio
@@ -155,11 +155,11 @@ async def test_stabilize_suppressed_during_active_action():
     """Verify stabilization is skipped when action flow is running."""
     service = _FakeService(action_state="running")  # action is active
     settings = _FakeSettings()
-    settings.neck_oscillation_variance_threshold = 0.01
-    settings.neck_oscillation_trigger_count = 3
-    settings.neck_oscillation_suppress_during_actions = True
+    settings.head_oscillation_variance_threshold = 0.01
+    settings.head_oscillation_trigger_count = 3
+    settings.head_oscillation_suppress_during_actions = True
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
 
     async def _oscillate():
         for i in range(80):
@@ -171,9 +171,6 @@ async def test_stabilize_suppressed_during_active_action():
     monitor.stop()
     await asyncio.sleep(0.05)
 
-    # Variance is high enough that with the low standby threshold it would trigger,
-    # but with the higher action_threshold (2.0) it may or may not — what matters
-    # is that stabilize was NOT called while action was running.
     assert len(service.set_head_calls) == 0
     assert monitor.action_suppressed or not monitor.oscillating
 
@@ -183,14 +180,14 @@ async def test_action_threshold_triggers_only_extreme_variance():
     """With action_threshold=2.0, moderate variance during action is ignored."""
     service = _FakeService(action_state="running")
     settings = _FakeSettings()
-    settings.neck_oscillation_variance_threshold = 0.01
-    settings.neck_oscillation_action_threshold = 2.0
-    settings.neck_oscillation_trigger_count = 3
-    settings.neck_oscillation_suppress_during_actions = False  # allow stabilize
+    settings.head_oscillation_variance_threshold = 0.01
+    settings.head_oscillation_action_threshold = 2.0
+    settings.head_oscillation_trigger_count = 3
+    settings.head_oscillation_suppress_during_actions = False  # allow stabilize
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
 
-    # Moderate oscillation: variance ~1.0 — below action_threshold
+    # Moderate oscillation: variance ~0.49 — below action_threshold of 2.0
     async def _moderate_oscillate():
         for i in range(80):
             service.dog.pitch = 0.7 if i % 2 == 0 else -0.7
@@ -201,7 +198,6 @@ async def test_action_threshold_triggers_only_extreme_variance():
     monitor.stop()
     await asyncio.sleep(0.05)
 
-    # variance ~0.49 (below action_threshold 2.0) → should NOT oscillate
     assert not monitor.oscillating
 
 
@@ -209,10 +205,10 @@ async def test_action_threshold_triggers_only_extreme_variance():
 async def test_oscillation_clears_when_imu_settles():
     service = _FakeService()
     settings = _FakeSettings()
-    settings.neck_oscillation_variance_threshold = 0.01
-    settings.neck_oscillation_trigger_count = 3
+    settings.head_oscillation_variance_threshold = 0.01
+    settings.head_oscillation_trigger_count = 3
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
     monitor.start()
 
     for i in range(40):
@@ -236,9 +232,9 @@ async def test_oscillation_clears_when_imu_settles():
 async def test_disabled_monitor_never_triggers():
     service = _FakeService()
     settings = _FakeSettings()
-    settings.neck_oscillation_enabled = False
+    settings.head_oscillation_enabled = False
 
-    monitor = NeckOscillationMonitor(service, settings)
+    monitor = HeadOscillationMonitor(service, settings)
 
     async def _oscillate():
         for i in range(60):
@@ -258,8 +254,8 @@ async def test_disabled_monitor_never_triggers():
 # REST endpoint tests
 # ---------------------------------------------------------------------------
 
-def test_neck_oscillation_endpoint(client):
-    resp = client.get("/api/v1/sensors/neck-oscillation")
+def test_head_oscillation_endpoint(client):
+    resp = client.get("/api/v1/sensors/head-oscillation")
     assert resp.status_code == 200
     data = resp.json()
     assert "oscillating" in data
@@ -275,9 +271,9 @@ def test_neck_oscillation_endpoint(client):
     assert isinstance(data["variance"], (int, float))
 
 
-def test_neck_oscillation_endpoint_initial_state(client):
+def test_head_oscillation_endpoint_initial_state(client):
     """On startup with stable mock hardware, should not be oscillating."""
-    resp = client.get("/api/v1/sensors/neck-oscillation")
+    resp = client.get("/api/v1/sensors/head-oscillation")
     assert resp.status_code == 200
     data = resp.json()
     assert data["oscillating"] is False

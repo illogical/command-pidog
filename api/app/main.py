@@ -11,9 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .routers import actions, agent, camera, logs, rgb, sensors, servos, sound, status
 from .services.camera_service import CameraService
+from .services.head_monitor import HeadOscillationMonitor
 from .services.idle_animator import IdleAnimator
 from .services.log_handler import BufferedLogHandler
-from .services.neck_monitor import NeckOscillationMonitor
 from .services.pidog_service import PidogService
 from .services.safety import SafetyValidator
 from .websocket.manager import ConnectionManager, SensorStream
@@ -34,16 +34,16 @@ root_logger.addHandler(console)
 logger = logging.getLogger("pidog.app")
 
 
-def _setup_neck_log_file(path: str) -> None:
-    """Attach a DEBUG-level file handler to the neck monitor logger.
+def _setup_head_log_file(path: str) -> None:
+    """Attach a DEBUG-level file handler to the head monitor logger.
 
-    This captures all neck monitor messages (including per-attempt stabilize
+    This captures all head monitor messages (including per-attempt stabilize
     commands logged at DEBUG) to a dedicated file without cluttering the
     main console output, which is filtered to INFO+ by default.
     """
-    neck_logger = logging.getLogger("pidog.neck_monitor")
+    head_logger = logging.getLogger("pidog.head_monitor")
     # Prevent DEBUG messages from propagating to the root handler (console/WS)
-    neck_logger.propagate = False
+    head_logger.propagate = False
     # Still forward WARNING+ to the root logger so important alerts appear
     class _PassWarnings(logging.Filter):
         def filter(self, record: logging.LogRecord) -> bool:
@@ -52,15 +52,15 @@ def _setup_neck_log_file(path: str) -> None:
     root_fwd = logging.StreamHandler()
     root_fwd.addFilter(_PassWarnings())
     root_fwd.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s %(message)s"))
-    neck_logger.addHandler(root_fwd)
+    head_logger.addHandler(root_fwd)
 
     # File handler — captures everything at DEBUG+
     fh = logging.FileHandler(path, encoding="utf-8")
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    neck_logger.addHandler(fh)
-    neck_logger.setLevel(logging.DEBUG)
-    logger.info(f"Neck monitor detailed log → {path}")
+    head_logger.addHandler(fh)
+    head_logger.setLevel(logging.DEBUG)
+    logger.info(f"Head monitor detailed log → {path}")
 
 
 @asynccontextmanager
@@ -82,12 +82,12 @@ async def lifespan(app: FastAPI):
         status_hz=settings.status_broadcast_hz,
     )
     camera_service = CameraService()
-    neck_monitor = NeckOscillationMonitor(pidog_service, settings)
+    head_monitor = HeadOscillationMonitor(pidog_service, settings)
     idle_animator = IdleAnimator(pidog_service, settings)
 
-    # Optional dedicated log file for neck monitor (DEBUG-level detail)
-    if settings.neck_oscillation_log_file:
-        _setup_neck_log_file(settings.neck_oscillation_log_file)
+    # Optional dedicated log file for head monitor (DEBUG-level detail)
+    if settings.head_oscillation_log_file:
+        _setup_head_log_file(settings.head_oscillation_log_file)
 
     # Connect log handler to WebSocket manager
     log_handler.set_ws_manager(ws_manager)
@@ -99,12 +99,12 @@ async def lifespan(app: FastAPI):
     app.state.sensor_stream = sensor_stream
     app.state.log_handler = log_handler
     app.state.camera = camera_service
-    app.state.neck_monitor = neck_monitor
+    app.state.head_monitor = head_monitor
     app.state.idle_animator = idle_animator
 
-    # Start sensor streaming, neck monitor, and idle animator
+    # Start sensor streaming, head monitor, and idle animator
     sensor_stream.start()
-    neck_monitor.start()
+    head_monitor.start()
     idle_animator.start()
 
     # Auto-start camera if configured
@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down PiDog API...")
     idle_animator.stop()
-    neck_monitor.stop()
+    head_monitor.stop()
     camera_service.stop()
     sensor_stream.stop()
     pidog_service.close()

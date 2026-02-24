@@ -25,7 +25,7 @@ Use this skill when a user asks to:
 - PiDog API running: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 - Base URL: `http://<pi-hostname>:8000/api/v1`
 - For vision: camera must be started (`POST /camera/start`) and a vision-capable model configured
-- For voice: Whisper STT endpoint running (default `http://localhost:5000/transcribe`)
+- For voice: Whisper STT endpoint running
 - Environment variables (in `api/.env`):
   ```
   PIDOG_OLLAMA_URL=http://localhost:11434

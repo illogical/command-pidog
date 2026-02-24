@@ -1,10 +1,10 @@
-"""Neck oscillation detection and active stabilization service.
+"""Head oscillation detection and active stabilization service.
 
-The neck yaw servo can spontaneously hunt (oscillate) around its commanded
-position due to mechanical backlash or servo PID instability. Since the
-PiDog library is feedforward-only (no servo position feedback), detection
-is indirect: yaw hunting couples into pitch/roll body motion, which the IMU
-can measure.
+An actuator inside the head can spontaneously hunt (oscillate) around its
+commanded position due to mechanical backlash or servo PID instability.
+Since the PiDog library is feedforward-only (no servo position feedback),
+detection is indirect: oscillation couples into pitch/roll body motion,
+which the IMU can measure.
 
 Strategy:
   - Poll IMU pitch and roll at 20Hz (vs the 5Hz WebSocket broadcast rate)
@@ -22,7 +22,7 @@ Action-awareness:
 Logging:
   - WARNING: oscillation detected / cleared (important, shown in console)
   - DEBUG:   per-attempt stabilize commands and action-suppression detail
-  - An optional dedicated log file (PIDOG_NECK_OSCILLATION_LOG_FILE) captures
+  - An optional dedicated log file (PIDOG_HEAD_OSCILLATION_LOG_FILE) captures
     DEBUG-level messages without polluting the main console output.
 """
 
@@ -33,7 +33,7 @@ import logging
 import time
 from collections import deque
 
-logger = logging.getLogger("pidog.neck_monitor")
+logger = logging.getLogger("pidog.head_monitor")
 
 
 def _variance(values: deque[float]) -> float:
@@ -45,25 +45,25 @@ def _variance(values: deque[float]) -> float:
     return sum((x - mean) ** 2 for x in values) / n
 
 
-class NeckOscillationMonitor:
-    """Detects neck yaw servo hunting via IMU variance and re-commands to stabilize.
+class HeadOscillationMonitor:
+    """Detects head actuator hunting via IMU variance and re-commands to stabilize.
 
     Instantiate and call start() inside the FastAPI lifespan. Access metrics
-    via get_metrics(). The monitor logs to the 'pidog.neck_monitor' logger,
+    via get_metrics(). The monitor logs to the 'pidog.head_monitor' logger,
     which is automatically broadcast over the WebSocket 'logs' channel.
     """
 
     def __init__(self, pidog_service, settings):
         self._service = pidog_service
-        self._enabled: bool = settings.neck_oscillation_enabled
-        self._threshold: float = settings.neck_oscillation_variance_threshold
-        self._action_threshold: float = settings.neck_oscillation_action_threshold
-        self._suppress_during_actions: bool = settings.neck_oscillation_suppress_during_actions
-        self._window: int = settings.neck_oscillation_window_size
-        self._poll_interval: float = 1.0 / settings.neck_oscillation_poll_hz
-        self._stabilize_speed: int = settings.neck_oscillation_stabilize_speed
-        self._cooldown: float = settings.neck_oscillation_cooldown_s
-        self._trigger_count: int = settings.neck_oscillation_trigger_count
+        self._enabled: bool = settings.head_oscillation_enabled
+        self._threshold: float = settings.head_oscillation_variance_threshold
+        self._action_threshold: float = settings.head_oscillation_action_threshold
+        self._suppress_during_actions: bool = settings.head_oscillation_suppress_during_actions
+        self._window: int = settings.head_oscillation_window_size
+        self._poll_interval: float = 1.0 / settings.head_oscillation_poll_hz
+        self._stabilize_speed: int = settings.head_oscillation_stabilize_speed
+        self._cooldown: float = settings.head_oscillation_cooldown_s
+        self._trigger_count: int = settings.head_oscillation_trigger_count
 
         # Sliding windows
         self._pitches: deque[float] = deque(maxlen=self._window)
@@ -89,7 +89,7 @@ class NeckOscillationMonitor:
     def start(self) -> None:
         self._task = asyncio.create_task(self._run())
         logger.info(
-            f"NeckOscillationMonitor started "
+            f"HeadOscillationMonitor started "
             f"(enabled={self._enabled}, threshold={self._threshold}, "
             f"action_threshold={self._action_threshold}, "
             f"suppress_during_actions={self._suppress_during_actions}, "
@@ -99,7 +99,7 @@ class NeckOscillationMonitor:
     def stop(self) -> None:
         if self._task:
             self._task.cancel()
-            logger.info("NeckOscillationMonitor stopped")
+            logger.info("HeadOscillationMonitor stopped")
 
     # ------------------------------------------------------------------
     # Background loop
@@ -107,7 +107,7 @@ class NeckOscillationMonitor:
 
     async def _run(self) -> None:
         if not self._enabled:
-            logger.info("NeckOscillationMonitor disabled — not running")
+            logger.info("HeadOscillationMonitor disabled — not running")
             return
 
         while True:
@@ -132,7 +132,7 @@ class NeckOscillationMonitor:
                             self.action_suppressed = False
                             self._suppression_logged = False
                             logger.info(
-                                f"Neck oscillation cleared — variance={self.variance:.4f}"
+                                f"Head oscillation cleared — variance={self.variance:.4f}"
                             )
                         self._consecutive_hits = 0
 
@@ -145,14 +145,14 @@ class NeckOscillationMonitor:
                         self.action_suppressed = suppressed
                         if suppressed:
                             logger.debug(
-                                f"Neck oscillation detected but suppressed — "
+                                f"Head oscillation detected but suppressed — "
                                 f"action '{queue_status.current_action}' is running, "
                                 f"variance={self.variance:.4f}"
                             )
                             self._suppression_logged = True
                         else:
                             logger.warning(
-                                f"Neck oscillation detected — variance={self.variance:.4f} "
+                                f"Head oscillation detected — variance={self.variance:.4f} "
                                 f"(threshold={threshold})"
                             )
 
@@ -163,7 +163,7 @@ class NeckOscillationMonitor:
                             await self._maybe_stabilize()
                         elif not self._suppression_logged:
                             logger.debug(
-                                f"Neck oscillation ongoing — suppressed while "
+                                f"Head oscillation ongoing — suppressed while "
                                 f"'{queue_status.current_action}' runs"
                             )
                             self._suppression_logged = True
@@ -173,7 +173,7 @@ class NeckOscillationMonitor:
             except asyncio.CancelledError:
                 break
             except Exception:
-                logger.exception("NeckOscillationMonitor error")
+                logger.exception("HeadOscillationMonitor error")
                 await asyncio.sleep(1.0)
 
     # ------------------------------------------------------------------
@@ -201,7 +201,7 @@ class NeckOscillationMonitor:
         self._stabilize_count += 1
         # DEBUG — per-attempt messages were too noisy at WARNING level
         logger.debug(
-            f"Neck stabilize command sent (#{self._stabilize_count}) — "
+            f"Head stabilize command sent (#{self._stabilize_count}) — "
             f"yaw={yaw:.1f}°, speed={self._stabilize_speed}"
         )
 

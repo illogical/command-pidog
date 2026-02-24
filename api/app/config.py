@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Idle animation (see services/idle_animator.py)
     # Replaces the built-in head-bobbing standby loop to avoid stressing the
-    # faulty neck actuator. Tail wags every N seconds + continuous RGB breath.
+    # faulty head actuator. Tail wags every N seconds + continuous RGB breath.
     idle_enabled: bool = True
     idle_interval_min_s: float = 5.0    # min seconds between tail wags
     idle_interval_max_s: float = 10.0   # max seconds between tail wags
@@ -54,17 +54,17 @@ class Settings(BaseSettings):
     idle_rgb_bps: float = 0.5           # breath speed (beats per second)
     idle_rgb_brightness: float = 0.7    # brightness 0-1
 
-    # Neck oscillation detection (see services/neck_monitor.py)
-    neck_oscillation_enabled: bool = True
-    neck_oscillation_variance_threshold: float = 0.3   # degrees² (pitch²+roll²) — at standby
-    neck_oscillation_action_threshold: float = 2.0     # higher bar when action flow is running
-    neck_oscillation_suppress_during_actions: bool = True  # skip stabilize while action runs
-    neck_oscillation_window_size: int = 40             # samples; 40@20Hz = 2s window
-    neck_oscillation_poll_hz: float = 20.0             # IMU sample rate for monitor
-    neck_oscillation_stabilize_speed: int = 15         # servo speed for re-command (0-100)
-    neck_oscillation_cooldown_s: float = 3.0           # min seconds between stabilize attempts
-    neck_oscillation_trigger_count: int = 10           # consecutive high-variance samples to trigger
-    neck_oscillation_log_file: str = ""                # path for detailed debug log; empty = disabled
+    # Head oscillation detection (see services/head_monitor.py)
+    head_oscillation_enabled: bool = True
+    head_oscillation_variance_threshold: float = 0.3   # degrees² (pitch²+roll²) — at standby
+    head_oscillation_action_threshold: float = 2.0     # higher bar when action flow is running
+    head_oscillation_suppress_during_actions: bool = True  # skip stabilize while action runs
+    head_oscillation_window_size: int = 40             # samples; 40@20Hz = 2s window
+    head_oscillation_poll_hz: float = 20.0             # IMU sample rate for monitor
+    head_oscillation_stabilize_speed: int = 15         # servo speed for re-command (0-100)
+    head_oscillation_cooldown_s: float = 3.0           # min seconds between stabilize attempts
+    head_oscillation_trigger_count: int = 10           # consecutive high-variance samples to trigger
+    head_oscillation_log_file: str = ""                # path for detailed debug log; empty = disabled
 
     model_config = {"env_prefix": "PIDOG_", "env_file": ".env"}
 

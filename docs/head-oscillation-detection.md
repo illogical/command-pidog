@@ -1,10 +1,10 @@
-# Neck Oscillation Detection & Stabilization
+# Head Oscillation Detection & Stabilization
 
 ## Problem
 
-The PiDog's neck yaw servo (left-right head motion) spontaneously oscillates at rest — a condition known as **servo hunting**. The servo's internal PID controller overshoots the commanded target position and keeps correcting, producing a visible left-right shaking that only stops when the head is manually held in place.
+An actuator inside the PiDog's head spontaneously oscillates around its commanded position — a condition known as **servo hunting**. The servo's internal PID controller overshoots the commanded target and keeps correcting, producing a visible shaking that only stops when the head is manually held in place.
 
-The idle animation (the `waiting` action) appears to mechanically destabilize the yaw servo, triggering hunting episodes.
+The head movement idle animation (the `waiting` action) can mechanically destabilize the actuator, triggering hunting episodes. This has been replaced with a tail-wag idle to reduce the frequency of triggering.
 
 ## Root Cause Analysis
 
@@ -14,7 +14,7 @@ This is primarily a **hardware/mechanical issue**. Possible contributors:
 - **PID gain mismatch** — the servo's P gain is too high for the actual mechanical load
 - **Load imbalance** — head weight distribution causes torque oscillation
 
-> **Software can suppress symptoms, but cannot fix the underlying hardware.** If the pivot is worn, replacing or tightening it is the permanent fix.
+> **Software can suppress symptoms, but cannot fix the underlying hardware.** If the pivot is worn, replacing or tightening it is the permanent fix. The oscillation can also occur with no server running at all — in that case only a hardware fix helps.
 
 ## Hardware Limitation
 
@@ -22,7 +22,7 @@ The PiDog library is **feedforward-only** — it sends position commands but rec
 
 ## Detection Strategy
 
-Yaw oscillations mechanically couple into pitch/roll body motion. By sampling IMU pitch and roll at **20Hz** (vs the 5Hz WebSocket broadcast rate), we can measure variance in a 2-second sliding window and detect sustained oscillation.
+Head actuator oscillation mechanically couples into pitch/roll body motion. By sampling IMU pitch and roll at **20Hz** (vs the 5Hz WebSocket broadcast rate), we can measure variance in a 2-second sliding window and detect sustained oscillation.
 
 ```
 oscillation detected when:
@@ -34,14 +34,14 @@ oscillation detected when:
 
 ## Action-Awareness
 
-The idle animation legitimately moves roll/pitch (±7°/±5°), which produces IMU variance that would otherwise trigger false positives. The monitor uses **two thresholds**:
+Intentional head movements produce legitimate IMU variance. The monitor uses **two thresholds**:
 
 - **Standby threshold** (`0.3°²`) — used when the action flow is idle. Sensitive enough to catch hunting.
 - **Action threshold** (`2.0°²`) — used when an action is actively running. Only triggers on extreme variance.
 
 When `suppress_during_actions=True` (default), the stabilizer will not send commands while an action is running, because any command would be immediately overwritten by the next animation step.
 
-Oscillation is still **reported** (visible in `/sensors/neck-oscillation` and the `action_suppressed` field) even when stabilization is suppressed.
+Oscillation is still **reported** (visible in `/sensors/head-oscillation` and the `action_suppressed` field) even when stabilization is suppressed.
 
 ## Stabilization Strategy
 
@@ -55,7 +55,7 @@ To reduce console noise, per-attempt stabilize messages are logged at **DEBUG** 
 
 For detailed debug logging to a file:
 ```bash
-PIDOG_NECK_OSCILLATION_LOG_FILE=/var/log/pidog/neck.log uvicorn app.main:app ...
+PIDOG_HEAD_OSCILLATION_LOG_FILE=/var/log/pidog/head.log uvicorn app.main:app ...
 ```
 
 The file captures all DEBUG-level messages (including every stabilize attempt) without cluttering the console.
@@ -64,21 +64,21 @@ The file captures all DEBUG-level messages (including every stabilize attempt) w
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `PIDOG_NECK_OSCILLATION_ENABLED` | `true` | Enable/disable the monitor |
-| `PIDOG_NECK_OSCILLATION_VARIANCE_THRESHOLD` | `0.3` | Variance (degrees²) that triggers detection at standby |
-| `PIDOG_NECK_OSCILLATION_ACTION_THRESHOLD` | `2.0` | Variance threshold while an action is running |
-| `PIDOG_NECK_OSCILLATION_SUPPRESS_DURING_ACTIONS` | `true` | Skip stabilize commands while action flow is active |
-| `PIDOG_NECK_OSCILLATION_WINDOW_SIZE` | `40` | Sliding window samples (40 @ 20Hz = 2s) |
-| `PIDOG_NECK_OSCILLATION_POLL_HZ` | `20.0` | IMU sampling rate for the monitor |
-| `PIDOG_NECK_OSCILLATION_STABILIZE_SPEED` | `15` | Servo speed used in re-command (0–100) |
-| `PIDOG_NECK_OSCILLATION_COOLDOWN_S` | `3.0` | Minimum seconds between stabilize attempts |
-| `PIDOG_NECK_OSCILLATION_TRIGGER_COUNT` | `10` | Consecutive high-variance samples before alert |
-| `PIDOG_NECK_OSCILLATION_LOG_FILE` | `""` | Path for detailed debug log file; empty = disabled |
+| `PIDOG_HEAD_OSCILLATION_ENABLED` | `true` | Enable/disable the monitor |
+| `PIDOG_HEAD_OSCILLATION_VARIANCE_THRESHOLD` | `0.3` | Variance (degrees²) that triggers detection at standby |
+| `PIDOG_HEAD_OSCILLATION_ACTION_THRESHOLD` | `2.0` | Variance threshold while an action is running |
+| `PIDOG_HEAD_OSCILLATION_SUPPRESS_DURING_ACTIONS` | `true` | Skip stabilize commands while action flow is active |
+| `PIDOG_HEAD_OSCILLATION_WINDOW_SIZE` | `40` | Sliding window samples (40 @ 20Hz = 2s) |
+| `PIDOG_HEAD_OSCILLATION_POLL_HZ` | `20.0` | IMU sampling rate for the monitor |
+| `PIDOG_HEAD_OSCILLATION_STABILIZE_SPEED` | `15` | Servo speed used in re-command (0–100) |
+| `PIDOG_HEAD_OSCILLATION_COOLDOWN_S` | `3.0` | Minimum seconds between stabilize attempts |
+| `PIDOG_HEAD_OSCILLATION_TRIGGER_COUNT` | `10` | Consecutive high-variance samples before alert |
+| `PIDOG_HEAD_OSCILLATION_LOG_FILE` | `""` | Path for detailed debug log file; empty = disabled |
 
 ## REST Endpoint
 
 ```
-GET /api/v1/sensors/neck-oscillation
+GET /api/v1/sensors/head-oscillation
 ```
 
 Response:
@@ -101,11 +101,11 @@ Response:
 
 ## WebSocket Events
 
-Oscillation detected/cleared events are emitted on the `logs` channel at WARNING/INFO level and appear in the main console:
+Oscillation detected/cleared events are emitted on the `logs` channel at WARNING/INFO level:
 
 ```json
-{"type": "logs", "data": {"level": "WARNING", "message": "Neck oscillation detected — variance=0.64 (threshold=0.3)"}}
-{"type": "logs", "data": {"level": "INFO",    "message": "Neck oscillation cleared — variance=0.19"}}
+{"type": "logs", "data": {"level": "WARNING", "message": "Head oscillation detected — variance=0.64 (threshold=0.3)"}}
+{"type": "logs", "data": {"level": "INFO",    "message": "Head oscillation cleared — variance=0.19"}}
 ```
 
 Per-attempt stabilize commands are DEBUG-only and do **not** appear in the WebSocket logs channel unless debug mode is enabled.
@@ -123,6 +123,7 @@ Per-attempt stabilize commands are DEBUG-only and do **not** appear in the WebSo
 ## Limitations
 
 - **No ground truth:** Without servo feedback, detection is indirect. The monitor cannot guarantee it is measuring hunting vs intentional motion.
-- **Coupling assumption:** If the head pivot is mechanically isolated, yaw oscillation may not register in pitch/roll IMU readings.
+- **Coupling assumption:** Oscillation coupling into pitch/roll depends on how the head actuator is mounted. If mechanically isolated, it may not register in IMU readings.
 - **Action flow conflict:** Stabilize commands during active actions are overwritten immediately. Suppression is the correct behavior in that case.
-- **True fix:** Adjust servo deadband in firmware (if accessible) or mechanically tighten/replace the pivot. This API-level solution treats symptoms.
+- **No-server case:** When the server is not running, the actuator can still hunt — software cannot help in that scenario.
+- **True fix:** Adjust servo deadband in firmware (if accessible) or mechanically tighten/replace the faulty actuator. This API-level solution treats symptoms.

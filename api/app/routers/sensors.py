@@ -55,13 +55,13 @@ async def get_sound(request: Request):
     return SoundReading(direction=direction, detected=detected)
 
 
-@router.get("/neck-oscillation")
-async def get_neck_oscillation(request: Request):
-    """Get neck oscillation detection metrics.
+@router.get("/head-oscillation")
+async def get_head_oscillation(request: Request):
+    """Get head oscillation detection metrics.
 
     Returns current variance, oscillation state, stabilization history, and
     configuration. Variance is the sum of IMU pitch and roll population
     variance over the sliding sample window.
     """
-    monitor = request.app.state.neck_monitor
+    monitor = request.app.state.head_monitor
     return monitor.get_metrics()
